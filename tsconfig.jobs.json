@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": "./dist-jobs"
+  },
+  "include": ["src/jobs/**/*.ts", "src/lib/**/*.ts", "src/types/**/*.ts"]
+}

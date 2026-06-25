@@ -1,0 +1,250 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Auth.js 必須テーブル
+// ============================================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================================
+// ユーザー管理
+// ============================================================
+
+enum UserRole {
+  ADMIN
+  INSTRUCTOR
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  role          UserRole  @default(INSTRUCTOR)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Auth.js relations
+  accounts Account[]
+  sessions Session[]
+
+  // App relations
+  googleAccount  GoogleAccount?
+  calendarEvents CalendarEvent[]
+  correctionJobs CorrectionJob[]
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+// ============================================================
+// Google OAuth連携（講師ごとの連携情報）
+// ============================================================
+
+enum GoogleAccountStatus {
+  ACTIVE
+  TOKEN_EXPIRED
+  REVOKED
+  ERROR
+}
+
+model GoogleAccount {
+  id                String              @id @default(cuid())
+  userId            String              @unique
+  googleEmail       String
+  googleAccountId   String              @unique
+  // トークンは暗号化して保存
+  accessTokenEnc    String              @db.Text
+  refreshTokenEnc   String              @db.Text
+  tokenExpiresAt    DateTime
+  scopes            String[]
+  status            GoogleAccountStatus @default(ACTIVE)
+  lastRefreshedAt   DateTime?
+  lastErrorMessage  String?
+  lastErrorAt       DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("google_accounts")
+}
+
+// ============================================================
+// 検知したカレンダーイベント
+// ============================================================
+
+enum DetectionStatus {
+  DETECTED         // 検知済み、補正処理前
+  MEET_PENDING     // MeetリンクがまだないのでPending
+  READY            // Meet情報確認済み、補正済み
+  SKIPPED          // 対象外（MeetなしなどでSkip）
+  CORRECTION_FAILED // 補正失敗
+}
+
+model CalendarEvent {
+  id              String          @id @default(cuid())
+  userId          String
+  calendarId      String
+  googleEventId   String
+  eventTitle      String
+  description     String?         @db.Text
+  startTime       DateTime
+  endTime         DateTime
+  meetLink        String?
+  meetSpaceId     String?         // Google Meet SpaceID (meetings/{id})
+  organizerEmail  String?
+  attendees       Json?           // JSON array of attendees
+  detectionStatus DetectionStatus @default(DETECTED)
+  rawData         Json?           // Google Calendar APIのレスポンス全体
+  firstDetectedAt DateTime        @default(now())
+  lastCheckedAt   DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id])
+  correctionJobs CorrectionJob[]
+
+  // 同一ユーザーの同一イベントは1件のみ
+  @@unique([userId, calendarId, googleEventId])
+  @@index([userId])
+  @@index([startTime])
+  @@index([detectionStatus])
+  @@map("calendar_events")
+}
+
+// ============================================================
+// 補正ジョブ
+// ============================================================
+
+enum JobType {
+  INITIAL_CORRECTION  // 初回補正
+  PRE_CHECK           // 開始前再確認補正
+  MANUAL_RETRY        // 手動再実行
+}
+
+enum JobStatus {
+  PENDING   // 実行待ち
+  RUNNING   // 実行中
+  SUCCESS   // 成功
+  FAILED    // 失敗（リトライ終了）
+  RETRYING  // リトライ中
+  SKIPPED   // スキップ（対象外等）
+}
+
+model CorrectionJob {
+  id                  String    @id @default(cuid())
+  calendarEventId     String
+  userId              String
+  jobType             JobType   @default(INITIAL_CORRECTION)
+  status              JobStatus @default(PENDING)
+  attemptCount        Int       @default(0)
+  maxAttempts         Int       @default(5)
+
+  // 補正前の状態
+  preRecordingEnabled     Boolean?
+  preTranscriptionEnabled Boolean?
+
+  // 補正後の状態（期待値）
+  postRecordingEnabled     Boolean?
+  postTranscriptionEnabled Boolean?
+
+  // 実際の最終状態確認
+  confirmedRecordingEnabled     Boolean?
+  confirmedTranscriptionEnabled Boolean?
+
+  // エラー情報
+  errorCode     String?
+  errorMessage  String?   @db.Text
+  errorDetail   Json?
+
+  // タイミング
+  scheduledAt  DateTime  @default(now())
+  startedAt    DateTime?
+  completedAt  DateTime?
+  nextRetryAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calendarEvent CalendarEvent @relation(fields: [calendarEventId], references: [id])
+  user          User          @relation(fields: [userId], references: [id])
+
+  @@index([status])
+  @@index([userId])
+  @@index([calendarEventId])
+  @@index([scheduledAt])
+  @@map("correction_jobs")
+}
+
+// ============================================================
+// 監査ログ
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String   // 例: "google.connect", "correction.retry", "admin.view_logs"
+  targetType String?  // 例: "CalendarEvent", "CorrectionJob", "User"
+  targetId   String?
+  detail     Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
