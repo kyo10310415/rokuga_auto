@@ -130,10 +130,10 @@ async function scanUserEvents(userId: string): Promise<{
         endTime: event.endTime,
         meetLink: event.meetLink,
         organizerEmail: event.organizerEmail,
-        attendees: event.attendees ? JSON.stringify(event.attendees) : undefined,
+        attendees: event.attendees ? JSON.parse(JSON.stringify(event.attendees)) : undefined,
         detectionStatus: DetectionStatus.DETECTED,
         firstDetectedAt: new Date(),
-        rawData: event.rawData,
+        rawData: JSON.parse(JSON.stringify(event.rawData)),
       },
       update: {
         eventTitle: event.title,
@@ -293,7 +293,7 @@ export async function executeJob(jobId: string): Promise<boolean> {
           confirmedTranscriptionEnabled: result.after.transcriptionEnabled,
           errorCode: null,
           errorMessage: null,
-          errorDetail: null,
+          errorDetail: undefined,
         },
       })
       

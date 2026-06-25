@@ -95,7 +95,7 @@ export async function fetchUpcomingEvents(
         organizerEmail: event.organizer?.email,
         attendees: event.attendees?.map((a) => ({
           email: a.email || '',
-          name: a.displayName,
+          name: a.displayName ?? undefined,
         })),
         rawData: event as Record<string, unknown>,
       })

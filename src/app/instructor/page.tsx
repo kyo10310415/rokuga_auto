@@ -8,10 +8,11 @@ import { addDays } from 'date-fns'
 export default async function InstructorPage({
   searchParams,
 }: {
-  searchParams: { success?: string; error?: string; missing?: string }
+  searchParams: Promise<{ success?: string; error?: string; missing?: string }>
 }) {
   const session = await requireAuth()
   const userId = session.user.id
+  const params = await searchParams
   
   const [googleAccount, upcomingEvents] = await Promise.all([
     prisma.googleAccount.findUnique({
@@ -56,7 +57,7 @@ export default async function InstructorPage({
         </div>
         
         {/* 成功・エラーメッセージ */}
-        {searchParams.success === 'google_connected' && (
+        {params.success === 'google_connected' && (
           <div className="bg-success-50 border border-success-200 rounded-md p-3">
             <p className="text-sm text-success-700">
               ✅ Googleアカウントの連携が完了しました。次回のスキャンから自動補正が開始されます。
@@ -64,10 +65,10 @@ export default async function InstructorPage({
           </div>
         )}
         
-        {searchParams.error && (
+        {params.error && (
           <div className="bg-danger-50 border border-danger-200 rounded-md p-3">
             <p className="text-sm text-danger-700">
-              ❌ {getErrorMessage(searchParams.error, searchParams.missing)}
+              ❌ {getErrorMessage(params.error, params.missing)}
             </p>
           </div>
         )}

@@ -2,22 +2,21 @@ import { requireAdmin } from '@/lib/auth/permissions'
 import { prisma } from '@/lib/prisma'
 import AppLayout from '@/components/layouts/AppLayout'
 import StatusBadge from '@/components/ui/StatusBadge'
-import { addDays } from 'date-fns'
+import { JobStatus } from '@prisma/client'
 
 export default async function AdminCorrectionsPage({
   searchParams,
 }: {
-  searchParams: { status?: string; page?: string }
+  searchParams: Promise<{ status?: string; page?: string }>
 }) {
   await requireAdmin()
   
-  const page = parseInt(searchParams.page || '1', 10)
+  const params = await searchParams
+  const page = parseInt(params.page || '1', 10)
   const limit = 30
-  const statusFilter = searchParams.status as never | undefined
+  const statusFilter = params.status as JobStatus | undefined
   
-  const where = {
-    ...(statusFilter && { status: statusFilter }),
-  }
+  const where = statusFilter ? { status: statusFilter } : {}
   
   const [jobs, total] = await Promise.all([
     prisma.correctionJob.findMany({
@@ -58,7 +57,7 @@ export default async function AdminCorrectionsPage({
                 key={s}
                 href={s ? `/admin/corrections?status=${s}` : '/admin/corrections'}
                 className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${
-                  (statusFilter || '') === s
+                  (params.status || '') === s
                     ? 'bg-primary-600 text-white border-primary-600'
                     : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                 }`}

@@ -132,12 +132,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         },
       }).catch((err) => console.error('監査ログ記録失敗:', err))
     },
-    async signOut({ token }) {
+    async signOut(message) {
       // サインアウトログ
-      if (token?.id) {
+      const tokenId = 'token' in message ? message.token?.id : undefined
+      if (tokenId) {
         await prisma.auditLog.create({
           data: {
-            userId: token.id as string,
+            userId: tokenId as string,
             action: 'auth.signout',
           },
         }).catch((err) => console.error('監査ログ記録失敗:', err))

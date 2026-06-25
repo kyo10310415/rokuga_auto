@@ -6,10 +6,8 @@ const nextConfig = {
   images: {
     domains: ['lh3.googleusercontent.com'],
   },
-  // サーバーコンポーネントの外部パッケージ設定
-  experimental: {
-    serverComponentsExternalPackages: ['pino', 'pino-pretty'],
-  },
+  // サーバーコンポーネントの外部パッケージ設定（Next.js 15移行済み）
+  serverExternalPackages: ['pino', 'pino-pretty'],
 }
 
 module.exports = nextConfig

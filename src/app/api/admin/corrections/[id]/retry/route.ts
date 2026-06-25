@@ -13,7 +13,7 @@ const log = createLogger({ module: 'admin-retry' })
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getAuthSession()
   
@@ -25,7 +25,7 @@ export async function POST(
     return NextResponse.json({ error: '権限がありません' }, { status: 403 })
   }
   
-  const jobId = params.id
+  const { id: jobId } = await params
   
   const job = await prisma.correctionJob.findUnique({
     where: { id: jobId },
