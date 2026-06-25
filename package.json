@@ -16,8 +16,7 @@
     "db:seed": "ts-node --project tsconfig.seed.json prisma/seed.ts",
     "jobs:scan": "ts-node --project tsconfig.jobs.json src/jobs/scan-events.ts",
     "jobs:pre-check": "ts-node --project tsconfig.jobs.json src/jobs/pre-check.ts",
-    "jobs:refresh-tokens": "ts-node --project tsconfig.jobs.json src/jobs/refresh-tokens.ts",
-    "postinstall": "prisma generate"
+    "jobs:refresh-tokens": "ts-node --project tsconfig.jobs.json src/jobs/refresh-tokens.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
