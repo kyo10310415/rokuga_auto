@@ -25,6 +25,10 @@ declare module 'next-auth' {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
+
+  // Render / Vercel 等のリバースプロキシ環境でホスト検証エラーを防ぐ
+  // AUTH_TRUST_HOST=true を環境変数で設定するか、ここで直接有効化する
+  trustHost: true,
   
   providers: [
     // Googleサインイン（Auth.jsログイン用 - スコープ最小限）
