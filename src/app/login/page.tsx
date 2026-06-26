@@ -2,10 +2,9 @@
 
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 
 export default function LoginPage() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/'
   const error = searchParams.get('error')
@@ -37,7 +36,10 @@ export default function LoginPage() {
     if (result?.error) {
       setFormError(errorMessages[result.error] || errorMessages.default)
     } else {
-      router.push(callbackUrl)
+      // router.push はクライアントサイドナビゲーションのためミドルウェアを経由しない場合がある。
+      // window.location.href でフルリロードしてミドルウェアを必ず通す。
+      // mustChangePassword=true なら middleware が /change-password にリダイレクトする。
+      window.location.href = callbackUrl
     }
   }
   
