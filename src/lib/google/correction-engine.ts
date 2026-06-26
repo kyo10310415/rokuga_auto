@@ -37,7 +37,7 @@ export async function scanAndQueueJobs(): Promise<{
   
   for (const account of activeAccounts) {
     try {
-      const result = await scanUserEvents(account.userId)
+      const result = await scanUserEvents(account.userId, account.googleEmail)
       scanned += result.scanned
       queued += result.queued
     } catch (err) {
@@ -53,7 +53,7 @@ export async function scanAndQueueJobs(): Promise<{
 /**
  * 特定ユーザーのイベントをスキャン
  */
-async function scanUserEvents(userId: string): Promise<{
+async function scanUserEvents(userId: string, googleEmail: string): Promise<{
   scanned: number
   queued: number
 }> {
@@ -74,6 +74,16 @@ async function scanUserEvents(userId: string): Promise<{
   for (const event of events) {
     // Meet付きイベントのみ対象
     if (!event.meetLink) {
+      continue
+    }
+    
+    // 自分が主催者のイベントのみ補正対象
+    // 他者主催の会議は Meet Space の PATCH 権限がないためスキップ
+    if (event.organizerEmail && event.organizerEmail.toLowerCase() !== googleEmail.toLowerCase()) {
+      logCtx.info(
+        { eventTitle: event.title, organizer: event.organizerEmail, self: googleEmail },
+        '他者主催イベントをスキップ（権限なし）'
+      )
       continue
     }
     
