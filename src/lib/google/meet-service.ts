@@ -115,8 +115,9 @@ function readArtifactSettings(spaceInfo: MeetSpaceInfo): ArtifactSettings {
  *   config.artifactConfig.recordingConfig.autoRecordingGeneration = "ON"
  *   config.artifactConfig.transcriptionConfig.autoTranscriptionGeneration = "ON"
  *
- * updateMask:
- *   "config.artifactConfig.recordingConfig,config.artifactConfig.transcriptionConfig"
+ * updateMask は使用しない:
+ *   公式仕様「updateMask未指定の場合、リクエストボディに値があるフィールドが全て更新される」
+ *   updateMask の正確なパス仕様が不明確なため、省略して全フィールド更新モードを使用する
  */
 export async function updateArtifactSettings(
   userId: string,
@@ -137,14 +138,10 @@ export async function updateArtifactSettings(
   try {
     const { client } = await getAuthenticatedClient(userId)
     
-    // updateMask: config.artifactConfig を指定することで artifactConfig 以下全体を更新
-    // 公式例: "config.accessType" と同じ形式で config. プレフィックスを付ける
-    const updateMask = 'config.artifactConfig'
-    
     const response = await client.request<MeetSpaceInfo>({
       url: `https://meet.googleapis.com/v2/${spaceName}`,
       method: 'PATCH',
-      params: { updateMask },
+      // updateMask は省略 → リクエストボディに値があるフィールドが全て更新される
       data: {
         config: {
           artifactConfig: {
