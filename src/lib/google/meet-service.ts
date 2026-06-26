@@ -137,12 +137,9 @@ export async function updateArtifactSettings(
   try {
     const { client } = await getAuthenticatedClient(userId)
     
-    // updateMask: artifactConfig 配下のrecording/transcriptionのみ更新
-    // smartNotesConfig は含めない（既存設定を維持）
-    const updateMask = [
-      'config.artifactConfig.recordingConfig',
-      'config.artifactConfig.transcriptionConfig',
-    ].join(',')
+    // updateMask: config.artifactConfig を指定することで artifactConfig 以下全体を更新
+    // 公式例: "config.accessType" と同じ形式で config. プレフィックスを付ける
+    const updateMask = 'config.artifactConfig'
     
     const response = await client.request<MeetSpaceInfo>({
       url: `https://meet.googleapis.com/v2/${spaceName}`,
@@ -157,6 +154,10 @@ export async function updateArtifactSettings(
             transcriptionConfig: {
               autoTranscriptionGeneration: 'ON',
             },
+            // smartNotesConfig は現在の値を引き継ぐ（上書きしない）
+            ...(currentSpace.config?.artifactConfig?.smartNotesConfig
+              ? { smartNotesConfig: currentSpace.config.artifactConfig.smartNotesConfig }
+              : {}),
           },
         },
       },
