@@ -2,13 +2,12 @@ import { requireAdmin } from '@/lib/auth/permissions'
 import { prisma } from '@/lib/prisma'
 import AppLayout from '@/components/layouts/AppLayout'
 import InstructorsClient from '@/components/admin/InstructorsClient'
-import { UserRole } from '@prisma/client'
 
 export default async function InstructorsPage() {
-  await requireAdmin()
+  const session = await requireAdmin()
 
-  const instructors = await prisma.user.findMany({
-    where: { role: UserRole.INSTRUCTOR },
+  // 管理者以外の全ユーザー（自分自身も含む全員表示）
+  const users = await prisma.user.findMany({
     include: {
       googleAccount: {
         select: {
@@ -26,13 +25,13 @@ export default async function InstructorsPage() {
         },
       },
     },
-    orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+    orderBy: [{ role: 'asc' }, { isActive: 'desc' }, { name: 'asc' }],
   })
 
   return (
     <AppLayout>
       <div className="space-y-6">
-        <InstructorsClient instructors={instructors} />
+        <InstructorsClient users={users} currentUserId={session.user.id} />
       </div>
     </AppLayout>
   )

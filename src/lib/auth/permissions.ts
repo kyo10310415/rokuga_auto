@@ -38,6 +38,6 @@ export function isAdmin(role: UserRole): boolean {
   return role === UserRole.ADMIN
 }
 
-export function isInstructor(role: UserRole): boolean {
-  return role === UserRole.INSTRUCTOR
+export function isUser(role: UserRole): boolean {
+  return role === UserRole.USER
 }

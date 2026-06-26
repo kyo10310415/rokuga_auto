@@ -21,7 +21,7 @@ export default async function AdminDashboard() {
     failedJobsCount,
     recentFailures,
   ] = await Promise.all([
-    prisma.user.count({ where: { role: 'INSTRUCTOR', isActive: true } }),
+    prisma.user.count({ where: { role: 'USER', isActive: true } }),
     prisma.googleAccount.count({ where: { status: GoogleAccountStatus.ACTIVE } }),
     prisma.googleAccount.count({ 
       where: { status: { in: [GoogleAccountStatus.TOKEN_EXPIRED, GoogleAccountStatus.ERROR] } } 

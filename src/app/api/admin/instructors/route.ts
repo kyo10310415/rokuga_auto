@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
   
   const [users, total] = await Promise.all([
     prisma.user.findMany({
-      where: { role: UserRole.INSTRUCTOR },
+      where: { role: UserRole.USER },
       include: {
         googleAccount: {
           select: {
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       skip: (page - 1) * limit,
       take: limit,
     }),
-    prisma.user.count({ where: { role: UserRole.INSTRUCTOR } }),
+    prisma.user.count({ where: { role: UserRole.USER } }),
   ])
   
   return NextResponse.json({
@@ -65,6 +65,7 @@ const createSchema = z.object({
   name: z.string().min(1, '名前は必須です').max(50),
   email: z.string().email('正しいメールアドレスを入力してください'),
   password: z.string().min(8, 'パスワードは8文字以上で入力してください'),
+  role: z.enum(['ADMIN', 'USER']).default('USER'),
 })
 
 export async function POST(request: NextRequest) {
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const { name, email, password } = parsed.data
+  const { name, email, password, role } = parsed.data
 
   // メールアドレス重複チェック
   const existing = await prisma.user.findUnique({ where: { email } })
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
     data: {
       name,
       email,
-      role: UserRole.INSTRUCTOR,
+      role: role as UserRole,
       emailVerified: new Date(),
       accounts: {
         create: {
