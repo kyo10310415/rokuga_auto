@@ -15,11 +15,13 @@ declare module 'next-auth' {
       name?: string | null
       image?: string | null
       role: UserRole
+      mustChangePassword: boolean
     }
   }
   
   interface User {
     role: UserRole
+    mustChangePassword?: boolean
   }
 }
 
@@ -55,7 +57,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         const schema = z.object({
           email: z.string().email(),
-          password: z.string().min(8),
+          password: z.string().min(1),
         })
         
         const parsed = schema.safeParse(credentials)
@@ -83,6 +85,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: account.user.email!,
           name: account.user.name,
           role: account.user.role,
+          mustChangePassword: account.user.mustChangePassword,
         }
       },
     }),
@@ -98,16 +101,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.role = user.role
         token.id = user.id
+        token.mustChangePassword = user.mustChangePassword ?? false
       }
       
       // DBからロールを最新化（セッション更新時）
       if (token.id && !token.role) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { role: true, isActive: true },
+          select: { role: true, isActive: true, mustChangePassword: true },
         })
         if (dbUser) {
           token.role = dbUser.role
+          token.mustChangePassword = dbUser.mustChangePassword
         }
       }
       
@@ -118,6 +123,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token) {
         session.user.id = token.id as string
         session.user.role = token.role as UserRole
+        session.user.mustChangePassword = (token.mustChangePassword as boolean) ?? false
       }
       return session
     },

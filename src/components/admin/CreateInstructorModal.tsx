@@ -11,7 +11,6 @@ export default function CreateInstructorModal({ onClose }: Props) {
   const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [role, setRole] = useState<'USER' | 'ADMIN'>('USER')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -25,7 +24,7 @@ export default function CreateInstructorModal({ onClose }: Props) {
       const res = await fetch('/api/admin/instructors', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, role }),
+        body: JSON.stringify({ name, email, role }),
       })
 
       const data = await res.json()
@@ -102,24 +101,13 @@ export default function CreateInstructorModal({ onClose }: Props) {
             />
           </div>
 
-          {/* 初期パスワード */}
-          <div>
-            <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1">
-              初期パスワード <span className="text-danger-500">*</span>
-            </label>
-            <input
-              id="new-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              placeholder="8文字以上"
-              className="w-full border border-gray-300 rounded-md py-2 px-3 text-sm
-                         focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              作成後に安全な方法で本人へ伝えてください
+          {/* 初期パスワード案内 */}
+          <div className="bg-amber-50 border border-amber-200 rounded-md px-4 py-3">
+            <p className="text-sm font-medium text-amber-800">
+              初期パスワード：<span className="font-mono tracking-widest">1111</span>
+            </p>
+            <p className="mt-0.5 text-xs text-amber-700">
+              初回ログイン後にパスワード変更が必要です。本人に口頭でお伝えください。
             </p>
           </div>
 

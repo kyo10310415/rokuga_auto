@@ -64,7 +64,6 @@ export async function GET(request: NextRequest) {
 const createSchema = z.object({
   name: z.string().min(1, '名前は必須です').max(50),
   email: z.string().email('正しいメールアドレスを入力してください'),
-  password: z.string().min(8, 'パスワードは8文字以上で入力してください'),
   role: z.enum(['ADMIN', 'USER']).default('USER'),
 })
 
@@ -87,7 +86,7 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const { name, email, password, role } = parsed.data
+  const { name, email, role } = parsed.data
 
   // メールアドレス重複チェック
   const existing = await prisma.user.findUnique({ where: { email } })
@@ -98,13 +97,15 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const hashedPassword = await bcrypt.hash(password, 12)
+  // 初期パスワードは "1111" 固定。初回ログイン後に変更を強制する
+  const hashedPassword = await bcrypt.hash('1111', 12)
 
   const user = await prisma.user.create({
     data: {
       name,
       email,
       role: role as UserRole,
+      mustChangePassword: true,
       emailVerified: new Date(),
       accounts: {
         create: {
