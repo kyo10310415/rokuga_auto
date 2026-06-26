@@ -5,6 +5,9 @@ import { NextResponse } from 'next/server'
  * ミドルウェア:
  * 1. 未認証ユーザーを /login にリダイレクト
  * 2. mustChangePassword=true のユーザーを /change-password にリダイレクト
+ *
+ * next-auth v5 beta: req.auth の型は Session | null
+ * session callback で session.user に詰めた値がそのまま入る
  */
 export default auth((req) => {
   const { pathname } = req.nextUrl
@@ -21,16 +24,15 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl)
   }
 
-  // mustChangePassword フラグが立っているユーザー
-  // /change-password 自体は通過させる（無限ループ防止）
-  const isChangePwPage = pathname.startsWith('/change-password')
   const mustChange = req.auth.user?.mustChangePassword === true
+  const isChangePwPage = pathname.startsWith('/change-password')
 
+  // mustChangePassword=true → /change-password 以外はリダイレクト
   if (mustChange && !isChangePwPage) {
     return NextResponse.redirect(new URL('/change-password', req.url))
   }
 
-  // 変更完了後に /change-password に残っていたら適切なダッシュボードへ
+  // 変更完了済みなのに /change-password にいる → ダッシュボードへ
   if (!mustChange && isChangePwPage) {
     const role = req.auth.user?.role
     const dest = role === 'ADMIN' ? '/admin' : '/instructor'

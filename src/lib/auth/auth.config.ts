@@ -97,15 +97,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
+      // ── 初回サインイン: user オブジェクトが渡される ──
       if (user) {
-        token.role = user.role
         token.id = user.id
-        token.mustChangePassword = user.mustChangePassword ?? false
+        token.role = user.role
+        // authorize() の戻り値が確実に届く保証がないため
+        // ここでも DB から取得して上書きする
+        const dbUser = await prisma.user.findUnique({
+          where: { id: user.id! },
+          select: { role: true, mustChangePassword: true },
+        })
+        if (dbUser) {
+          token.role = dbUser.role
+          token.mustChangePassword = dbUser.mustChangePassword
+        } else {
+          token.mustChangePassword = false
+        }
       }
-      
-      // DBからロールを最新化（セッション更新時）
-      if (token.id && !token.role) {
+
+      // ── セッション更新 or ロール未設定時: DB を再取得 ──
+      if (!user && token.id && (trigger === 'update' || !token.role)) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
           select: { role: true, isActive: true, mustChangePassword: true },
@@ -115,7 +127,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.mustChangePassword = dbUser.mustChangePassword
         }
       }
-      
+
       return token
     },
     
