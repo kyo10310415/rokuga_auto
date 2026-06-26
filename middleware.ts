@@ -6,10 +6,9 @@ import { getToken } from 'next-auth/jwt'
  * 1. 未認証ユーザーを /login にリダイレクト
  * 2. mustChangePassword=true のユーザーを /change-password にリダイレクト
  *
- * auth() wrapper 方式だと Auth.js v5 beta で session callback が経由されず
- * mustChangePassword が req.auth.user に入らない問題があるため、
- * getToken() で JWT を直接デコードする方式に変更。
- * JWT callback で token.mustChangePassword をセットしているので確実に取得できる。
+ * getToken() で JWT を直接デコード。
+ * Render(HTTPS) 環境では cookie 名が __Secure-authjs.session-token になるため
+ * cookieName を明示指定する。
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -19,10 +18,14 @@ export async function middleware(request: NextRequest) {
   const isPublic = publicPaths.some((p) => pathname.startsWith(p))
   if (isPublic) return NextResponse.next()
 
-  // JWT を直接デコード（session callback を経由しない）
+  const secret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET
+
+  // HTTPS環境(本番)では __Secure- プレフィックス付きのcookie名になる
+  // secureCookie: true を指定することで自動的に対応
   const token = await getToken({
     req: request,
-    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+    secret,
+    secureCookie: true,
   })
 
   // 未認証（トークンなし）→ ログインへ

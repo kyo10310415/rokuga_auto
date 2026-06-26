@@ -5,7 +5,6 @@ import { prisma } from '@/lib/prisma'
 
 /**
  * GET /api/debug/session
- * セッション・JWT・DB の状態を確認するデバッグエンドポイント
  * ⚠️ 確認後に必ず削除すること
  */
 export async function GET(req: NextRequest) {
@@ -15,46 +14,38 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: '未認証' }, { status: 401 })
   }
 
-  // getToken で JWT を直接デコード（middleware と同じ方法）
-  const tokenWithSecret1 = await getToken({
+  const secret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET
+
+  // secureCookie: true（HTTPS環境用）
+  const tokenSecure = await getToken({
     req,
-    secret: process.env.AUTH_SECRET,
+    secret,
+    secureCookie: true,
   }).catch((e) => ({ error: String(e) }))
 
-  const tokenWithSecret2 = await getToken({
+  // secureCookie: false（HTTP環境用）
+  const tokenInsecure = await getToken({
     req,
-    secret: process.env.NEXTAUTH_SECRET,
+    secret,
+    secureCookie: false,
   }).catch((e) => ({ error: String(e) }))
 
-  // DBから直接取得
   const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      isActive: true,
-      mustChangePassword: true,
-    },
+    select: { mustChangePassword: true },
   })
 
-  // クッキー名の確認
   const cookieNames = req.cookies.getAll().map((c) => c.name)
 
   return NextResponse.json({
-    session_user: session.user,
-    db_user: dbUser,
-    // getToken の結果（AUTH_SECRET 使用）
-    getToken_AUTH_SECRET: tokenWithSecret1,
-    // getToken の結果（NEXTAUTH_SECRET 使用）
-    getToken_NEXTAUTH_SECRET: tokenWithSecret2,
-    // 環境変数の存在確認（値は表示しない）
+    session_mustChangePassword: session.user.mustChangePassword,
+    db_mustChangePassword: dbUser?.mustChangePassword,
+    getToken_secureCookie_true:  tokenSecure  ? { mustChangePassword: (tokenSecure as Record<string,unknown>).mustChangePassword } : null,
+    getToken_secureCookie_false: tokenInsecure ? { mustChangePassword: (tokenInsecure as Record<string,unknown>).mustChangePassword } : null,
     env: {
       AUTH_SECRET_exists: !!process.env.AUTH_SECRET,
       NEXTAUTH_SECRET_exists: !!process.env.NEXTAUTH_SECRET,
     },
-    // Cookieの一覧（名前のみ）
     cookie_names: cookieNames,
   })
 }
