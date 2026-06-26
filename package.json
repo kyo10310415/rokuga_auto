@@ -10,7 +10,7 @@
     "type-check": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:migrate": "prisma migrate deploy",
+    "db:migrate": "sh scripts/migrate.sh",
     "db:migrate:dev": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "ts-node --project tsconfig.seed.json prisma/seed.ts",
