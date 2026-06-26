@@ -17,7 +17,7 @@ services:
     region: oregon
     branch: main
     buildCommand: "npm install && npm run db:generate && npm run build"
-    startCommand: "npm run db:migrate && npm start"
+    startCommand: "npx prisma migrate resolve --rolled-back 20260626000000_rename_instructor_to_user 2>/dev/null || true && npm run db:migrate && npm start"
     healthCheckPath: /api/health
     
     envVars:

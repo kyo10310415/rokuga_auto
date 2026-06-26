@@ -1,25 +1,25 @@
 -- UserRole Enum の INSTRUCTOR → USER リネーム
--- PostgreSQL では Enum 値を直接リネームできないため、
--- 一時値を経由して安全に置換する
+-- PostgreSQL の ADD VALUE はトランザクション内で使用不可 (error 55P04) のため、
+-- 型を丸ごと置換するアプローチを採用（ADD VALUE を一切使わない）
 
--- Step 1: 新しい値 USER を追加
-ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'USER';
-
--- Step 2: 既存の INSTRUCTOR を USER に更新
-UPDATE "users" SET "role" = 'USER' WHERE "role" = 'INSTRUCTOR';
-
--- Step 3: INSTRUCTOR 値を持つレコードがないことを確認してから
--- Enum 値を削除（PostgreSQL では直接削除できないため型を再作成）
--- 既存の型を削除して再作成する（USER, ADMIN のみ）
+-- Step 1: 既存の Enum 型を旧名にリネーム
 ALTER TYPE "UserRole" RENAME TO "UserRole_old";
 
+-- Step 2: 新しい型を作成（INSTRUCTOR を除外し USER を追加）
 CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'USER');
 
+-- Step 3: カラムを新しい型に変換
+--   USING: INSTRUCTOR → USER、ADMIN → ADMIN にマッピング
 ALTER TABLE "users"
   ALTER COLUMN "role" TYPE "UserRole"
-  USING "role"::text::"UserRole";
+  USING CASE "role"::text
+    WHEN 'INSTRUCTOR' THEN 'USER'::"UserRole"
+    WHEN 'ADMIN'      THEN 'ADMIN'::"UserRole"
+    ELSE                   'USER'::"UserRole"
+  END;
 
+-- Step 4: デフォルト値を新しい型で再設定
+ALTER TABLE "users" ALTER COLUMN "role" SET DEFAULT 'USER'::"UserRole";
+
+-- Step 5: 旧型を削除
 DROP TYPE "UserRole_old";
-
--- デフォルト値も更新
-ALTER TABLE "users" ALTER COLUMN "role" SET DEFAULT 'USER';
