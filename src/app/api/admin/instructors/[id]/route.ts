@@ -77,3 +77,96 @@ export async function PATCH(
 
   return NextResponse.json({ user: updated })
 }
+
+/**
+ * DELETE /api/admin/instructors/[id]
+ * ユーザーを完全削除（関連データも含む）
+ *
+ * 削除順序（外部キー制約のため手動で制御）:
+ *   correctionJobs → calendarEvents → User
+ *   accounts / sessions / googleAccount は onDelete:Cascade で自動削除
+ *   auditLogs は userId が nullable なので NULLに更新してから削除
+ */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getAuthSession()
+
+  if (!session?.user) {
+    return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
+  }
+  if (session.user.role !== UserRole.ADMIN) {
+    return NextResponse.json({ error: '権限がありません' }, { status: 403 })
+  }
+
+  const { id } = await params
+
+  // 自分自身は削除不可
+  if (id === session.user.id) {
+    return NextResponse.json(
+      { error: '自分自身を削除することはできません' },
+      { status: 400 }
+    )
+  }
+
+  const target = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      _count: { select: { calendarEvents: true, correctionJobs: true } },
+    },
+  })
+
+  if (!target) {
+    return NextResponse.json({ error: 'ユーザーが見つかりません' }, { status: 404 })
+  }
+
+  // ADMIN ユーザーは削除不可（誤操作防止）
+  if (target.role === UserRole.ADMIN) {
+    return NextResponse.json(
+      { error: '管理者アカウントは削除できません。先にロールを「ユーザー」に変更してください。' },
+      { status: 400 }
+    )
+  }
+
+  // トランザクションで関連データをすべて削除
+  await prisma.$transaction(async (tx) => {
+    // 1. auditLogs の userId を NULL に（ログ自体は残す）
+    await tx.auditLog.updateMany({
+      where: { userId: id },
+      data: { userId: null },
+    })
+
+    // 2. correctionJobs 削除（calendarEvent に紐づいているため先に削除）
+    await tx.correctionJob.deleteMany({ where: { userId: id } })
+
+    // 3. calendarEvents 削除
+    await tx.calendarEvent.deleteMany({ where: { userId: id } })
+
+    // 4. User 削除（accounts / sessions / googleAccount は Cascade で自動削除）
+    await tx.user.delete({ where: { id } })
+  })
+
+  // 削除実行者の監査ログを記録（操作者のIDで残す）
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      action: 'admin.delete_user',
+      targetType: 'User',
+      targetId: id,
+      detail: {
+        deletedEmail: target.email,
+        deletedName: target.name,
+        calendarEventsDeleted: target._count.calendarEvents,
+        correctionJobsDeleted: target._count.correctionJobs,
+      },
+    },
+  }).catch((err) => console.error('監査ログ記録失敗:', err))
+
+  return NextResponse.json({ success: true })
+}
+
