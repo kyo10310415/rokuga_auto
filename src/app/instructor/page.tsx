@@ -2,6 +2,7 @@ import { requireAuth } from '@/lib/auth/permissions'
 import { prisma } from '@/lib/prisma'
 import AppLayout from '@/components/layouts/AppLayout'
 import StatusBadge from '@/components/ui/StatusBadge'
+import DisconnectButton from '@/components/instructor/DisconnectButton'
 import { GoogleAccountStatus, DetectionStatus } from '@prisma/client'
 import { addDays } from 'date-fns'
 
@@ -92,22 +93,7 @@ export default async function InstructorPage({
               </div>
               
               <div className="flex gap-2 mt-3">
-                <form action="/api/google/disconnect" method="post">
-                  <input type="hidden" name="_method" value="DELETE" />
-                  <a
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      if (confirm('Google連携を解除しますか？\n解除後は自動補正が停止します。')) {
-                        fetch('/api/google/disconnect', { method: 'DELETE' })
-                          .then(() => window.location.reload())
-                      }
-                    }}
-                    className="text-xs text-danger-600 hover:underline"
-                  >
-                    連携を解除する
-                  </a>
-                </form>
+                <DisconnectButton />
               </div>
             </div>
           ) : hasTokenIssue ? (

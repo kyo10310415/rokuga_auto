@@ -32,6 +32,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   
   providers: [
     // Googleサインイン（Auth.jsログイン用 - スコープ最小限）
+    // checks: ["state"] に限定することで、リバースプロキシ環境での
+    // "iss (issuer) missing" エラーを回避する（PKCEを無効化）
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
@@ -40,6 +42,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           scope: 'openid email profile',
         },
       },
+      checks: ['state'],
     }),
     
     // メール＋パスワードログイン（管理者の初期ログイン用）
