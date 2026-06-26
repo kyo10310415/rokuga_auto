@@ -3,19 +3,33 @@ import { createLogger } from '@/lib/logger'
 
 const log = createLogger({ module: 'meet-service' })
 
+// ============================================================
+// Google Meet API v2 の正しい型定義
+// 公式: https://developers.google.com/workspace/meet/api/reference/rest/v2/spaces
+//
+// 構造:
+//   Space.config (SpaceConfig)
+//     └─ artifactConfig (ArtifactConfig)
+//          ├─ recordingConfig.autoRecordingGeneration: "ON" | "OFF"
+//          ├─ transcriptionConfig.autoTranscriptionGeneration: "ON" | "OFF"
+//          └─ smartNotesConfig.autoSmartNotesGeneration: "ON" | "OFF"
+// ============================================================
+
 export interface MeetSpaceInfo {
-  name: string  // "spaces/{id}" 形式
+  name: string        // "spaces/{id}" 形式
   meetingUri: string
   meetingCode: string
   config?: {
-    recordingConfig?: {
-      autoRecording?: string  // "RECORDING_ENABLED" | "RECORDING_DISABLED"
-    }
-    transcriptionConfig?: {
-      autoTranscription?: string  // "TRANSCRIPTION_ENABLED" | "TRANSCRIPTION_DISABLED"
-    }
-    smartNotesConfig?: {
-      autoSmartNotes?: string
+    artifactConfig?: {
+      recordingConfig?: {
+        autoRecordingGeneration?: string    // "ON" | "OFF" | "AUTO_GENERATION_TYPE_UNSPECIFIED"
+      }
+      transcriptionConfig?: {
+        autoTranscriptionGeneration?: string // "ON" | "OFF" | "AUTO_GENERATION_TYPE_UNSPECIFIED"
+      }
+      smartNotesConfig?: {
+        autoSmartNotesGeneration?: string   // "ON" | "OFF" | "AUTO_GENERATION_TYPE_UNSPECIFIED"
+      }
     }
   }
 }
@@ -48,8 +62,6 @@ export async function getMeetSpace(
   try {
     const { client } = await getAuthenticatedClient(userId)
     
-    // Google Meet API v2を直接呼び出し
-    // googleapis SDKにはMeet APIが含まれているが、バージョン確認が必要
     const response = await client.request<MeetSpaceInfo>({
       url: `https://meet.googleapis.com/v2/${spaceName}`,
       method: 'GET',
@@ -84,10 +96,27 @@ export async function getMeetSpaceByLink(
 }
 
 /**
+ * SpaceInfo から ArtifactSettings を読み取るヘルパー
+ */
+function readArtifactSettings(spaceInfo: MeetSpaceInfo): ArtifactSettings {
+  const artifact = spaceInfo.config?.artifactConfig
+  return {
+    recordingEnabled:     artifact?.recordingConfig?.autoRecordingGeneration === 'ON',
+    transcriptionEnabled: artifact?.transcriptionConfig?.autoTranscriptionGeneration === 'ON',
+    smartNotesEnabled:    artifact?.smartNotesConfig?.autoSmartNotesGeneration === 'ON',
+  }
+}
+
+/**
  * Meet Spaceのartifact設定を更新
  * 録画・文字起こしをONに補正する
- * 
- * 重要: smartNotesConfigは変更しない（既存設定を維持）
+ *
+ * 正しいAPI構造 (v2):
+ *   config.artifactConfig.recordingConfig.autoRecordingGeneration = "ON"
+ *   config.artifactConfig.transcriptionConfig.autoTranscriptionGeneration = "ON"
+ *
+ * updateMask:
+ *   "config.artifactConfig.recordingConfig,config.artifactConfig.transcriptionConfig"
  */
 export async function updateArtifactSettings(
   userId: string,
@@ -96,30 +125,24 @@ export async function updateArtifactSettings(
 ): Promise<{ success: boolean; before: ArtifactSettings; after: ArtifactSettings; error?: string }> {
   const logCtx = createLogger({ module: 'meet-service', userId, spaceName })
   
-  const before: ArtifactSettings = {
-    recordingEnabled: currentSpace.config?.recordingConfig?.autoRecording === 'RECORDING_ENABLED',
-    transcriptionEnabled: currentSpace.config?.transcriptionConfig?.autoTranscription === 'TRANSCRIPTION_ENABLED',
-    smartNotesEnabled: currentSpace.config?.smartNotesConfig?.autoSmartNotes === 'SMART_NOTES_ENABLED',
-  }
-  
+  const before = readArtifactSettings(currentSpace)
   logCtx.info({ before }, '補正前の設定')
   
   // 既にONの場合はスキップ
   if (before.recordingEnabled && before.transcriptionEnabled) {
     logCtx.info('既に録画・文字起こしがONです。補正をスキップします。')
-    return {
-      success: true,
-      before,
-      after: before,
-    }
+    return { success: true, before, after: before }
   }
   
   try {
     const { client } = await getAuthenticatedClient(userId)
     
-    // PATCHリクエストで設定を更新
-    // smartNotesConfigは含めない（変更しない）
-    const updateMask = 'config.recordingConfig,config.transcriptionConfig'
+    // updateMask: artifactConfig 配下のrecording/transcriptionのみ更新
+    // smartNotesConfig は含めない（既存設定を維持）
+    const updateMask = [
+      'config.artifactConfig.recordingConfig',
+      'config.artifactConfig.transcriptionConfig',
+    ].join(',')
     
     const response = await client.request<MeetSpaceInfo>({
       url: `https://meet.googleapis.com/v2/${spaceName}`,
@@ -127,22 +150,19 @@ export async function updateArtifactSettings(
       params: { updateMask },
       data: {
         config: {
-          recordingConfig: {
-            autoRecording: 'RECORDING_ENABLED',
-          },
-          transcriptionConfig: {
-            autoTranscription: 'TRANSCRIPTION_ENABLED',
+          artifactConfig: {
+            recordingConfig: {
+              autoRecordingGeneration: 'ON',
+            },
+            transcriptionConfig: {
+              autoTranscriptionGeneration: 'ON',
+            },
           },
         },
       },
     })
     
-    const after: ArtifactSettings = {
-      recordingEnabled: response.data.config?.recordingConfig?.autoRecording === 'RECORDING_ENABLED',
-      transcriptionEnabled: response.data.config?.transcriptionConfig?.autoTranscription === 'TRANSCRIPTION_ENABLED',
-      smartNotesEnabled: response.data.config?.smartNotesConfig?.autoSmartNotes === 'SMART_NOTES_ENABLED',
-    }
-    
+    const after = readArtifactSettings(response.data)
     logCtx.info({ before, after }, '補正完了')
     
     return { success: true, before, after }
@@ -168,10 +188,5 @@ export async function verifyArtifactSettings(
 ): Promise<ArtifactSettings | null> {
   const spaceInfo = await getMeetSpace(userId, spaceName)
   if (!spaceInfo) return null
-  
-  return {
-    recordingEnabled: spaceInfo.config?.recordingConfig?.autoRecording === 'RECORDING_ENABLED',
-    transcriptionEnabled: spaceInfo.config?.transcriptionConfig?.autoTranscription === 'TRANSCRIPTION_ENABLED',
-    smartNotesEnabled: spaceInfo.config?.smartNotesConfig?.autoSmartNotes === 'SMART_NOTES_ENABLED',
-  }
+  return readArtifactSettings(spaceInfo)
 }
