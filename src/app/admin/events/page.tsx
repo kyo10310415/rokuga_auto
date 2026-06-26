@@ -2,6 +2,7 @@ import { requireAdmin } from '@/lib/auth/permissions'
 import { prisma } from '@/lib/prisma'
 import AppLayout from '@/components/layouts/AppLayout'
 import StatusBadge from '@/components/ui/StatusBadge'
+import UserFilterSelect from '@/components/admin/UserFilterSelect'
 import { DetectionStatus, UserRole } from '@prisma/client'
 
 export default async function AdminEventsPage({
@@ -90,31 +91,12 @@ export default async function AdminEventsPage({
 
           {/* フィルターエリア */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* ユーザー絞り込みセレクト */}
-            <form method="GET" action="/admin/events" className="flex items-center gap-2">
-              {statusFilter && (
-                <input type="hidden" name="status" value={statusFilter} />
-              )}
-              <select
-                name="userId"
-                defaultValue={userIdFilter ?? ''}
-                onChange={(e) => {
-                  // フォームを即時サブミット
-                  e.currentTarget.form?.submit()
-                }}
-                className="text-xs border border-gray-300 rounded-md py-1.5 pl-2 pr-7 bg-white
-                           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                           text-gray-700 appearance-none cursor-pointer"
-                style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 4px center', backgroundSize: '16px' }}
-              >
-                <option value="">すべてのユーザー</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name || u.email}
-                  </option>
-                ))}
-              </select>
-            </form>
+            {/* ユーザー絞り込みセレクト（Client Component） */}
+            <UserFilterSelect
+              users={users}
+              currentUserId={userIdFilter}
+              currentStatus={statusFilter}
+            />
 
             {/* ステータスフィルター */}
             <div className="flex flex-wrap gap-2">
