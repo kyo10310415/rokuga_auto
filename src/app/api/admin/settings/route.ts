@@ -5,11 +5,9 @@ import { UserRole } from '@prisma/client'
 import { z } from 'zod'
 
 const TRANSCRIPTION_FOLDER_KEY = 'transcriptionFolderId'
-const SOURCE_FOLDER_KEY = 'sourceFolderId'
 
 const updateSchema = z.object({
   transcriptionFolderUrl: z.string().optional().nullable(),
-  sourceFolderUrl: z.string().optional().nullable(),
 })
 
 /**
@@ -26,13 +24,8 @@ export async function GET() {
     where: { key: TRANSCRIPTION_FOLDER_KEY },
   })
 
-  const sourceSetting = await prisma.systemSetting.findUnique({
-    where: { key: SOURCE_FOLDER_KEY },
-  })
-
   return NextResponse.json({
     transcriptionFolderUrl: setting?.value ?? null,
-    sourceFolderUrl: sourceSetting?.value ?? null,
   })
 }
 
@@ -52,7 +45,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
   }
 
-  const { transcriptionFolderUrl, sourceFolderUrl } = parsed.data
+  const { transcriptionFolderUrl } = parsed.data
 
   await prisma.systemSetting.upsert({
     where: { key: TRANSCRIPTION_FOLDER_KEY },
@@ -65,22 +58,11 @@ export async function PATCH(request: NextRequest) {
     },
   })
 
-  await prisma.systemSetting.upsert({
-    where: { key: SOURCE_FOLDER_KEY },
-    create: {
-      key: SOURCE_FOLDER_KEY,
-      value: sourceFolderUrl ?? null,
-    },
-    update: {
-      value: sourceFolderUrl ?? null,
-    },
-  })
-
   await prisma.auditLog.create({
     data: {
       userId: session.user.id,
       action: 'admin.update_settings',
-      detail: { transcriptionFolderUrl, sourceFolderUrl },
+      detail: { transcriptionFolderUrl },
     },
   })
 

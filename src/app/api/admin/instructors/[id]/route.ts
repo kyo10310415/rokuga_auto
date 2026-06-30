@@ -8,11 +8,13 @@ const patchSchema = z.object({
   isActive: z.boolean().optional(),
   role: z.enum(['ADMIN', 'USER']).optional(),
   recordingFolderUrl: z.string().optional().nullable(),
+  sourceFolderUrl: z.string().optional().nullable(),
   fileMovingEnabled: z.boolean().optional(),
 }).refine((d) =>
   d.isActive !== undefined ||
   d.role !== undefined ||
   d.recordingFolderUrl !== undefined ||
+  d.sourceFolderUrl !== undefined ||
   d.fileMovingEnabled !== undefined,
   { message: '変更するフィールドが必要です' }
 )
@@ -52,18 +54,27 @@ export async function PATCH(
     return NextResponse.json({ error: 'ユーザーが見つかりません' }, { status: 404 })
   }
 
-  const updateData: { isActive?: boolean; role?: UserRole; recordingFolderId?: string | null; fileMovingEnabled?: boolean } = {}
+  const updateData: {
+    isActive?: boolean
+    role?: UserRole
+    recordingFolderId?: string | null
+    sourceFolderId?: string | null
+    fileMovingEnabled?: boolean
+  } = {}
   if (parsed.data.isActive !== undefined) updateData.isActive = parsed.data.isActive
   if (parsed.data.role !== undefined) updateData.role = parsed.data.role as UserRole
   if (parsed.data.recordingFolderUrl !== undefined) {
     updateData.recordingFolderId = parsed.data.recordingFolderUrl ?? null
+  }
+  if (parsed.data.sourceFolderUrl !== undefined) {
+    updateData.sourceFolderId = parsed.data.sourceFolderUrl ?? null
   }
   if (parsed.data.fileMovingEnabled !== undefined) updateData.fileMovingEnabled = parsed.data.fileMovingEnabled
 
   const updated = await prisma.user.update({
     where: { id },
     data: updateData,
-    select: { id: true, name: true, email: true, isActive: true, role: true, recordingFolderId: true, fileMovingEnabled: true },
+    select: { id: true, name: true, email: true, isActive: true, role: true, recordingFolderId: true, sourceFolderId: true, fileMovingEnabled: true },
   })
 
   // 監査ログ

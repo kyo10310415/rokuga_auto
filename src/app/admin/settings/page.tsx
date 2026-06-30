@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation'
 export default function SettingsPage() {
   const router = useRouter()
   const [transcriptionFolderUrl, setTranscriptionFolderUrl] = useState('')
-  const [sourceFolderUrl, setSourceFolderUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
   const [saved, setSaved] = useState(false)
@@ -19,7 +18,6 @@ export default function SettingsPage() {
         if (res.ok) {
           const data = await res.json()
           setTranscriptionFolderUrl(data.transcriptionFolderUrl ?? '')
-          setSourceFolderUrl(data.sourceFolderUrl ?? '')
         }
       } catch {
         setError('設定の読み込みに失敗しました')
@@ -40,7 +38,6 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           transcriptionFolderUrl: transcriptionFolderUrl || null,
-          sourceFolderUrl: sourceFolderUrl || null,
         }),
       })
       if (!res.ok) {
@@ -71,44 +68,6 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-xl font-bold text-gray-900">システム設定</h1>
         <p className="text-sm text-gray-500 mt-1">全体共通の設定を管理します</p>
-      </div>
-
-      {/* 移動元フォルダ設定 */}
-      <div className="card p-6 space-y-5">
-        <div>
-          <h2 className="text-base font-semibold text-gray-800">
-            ファイル移動元フォルダ
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">
-            録画・文字起こしファイルの取得元フォルダです。
-            未設定の場合は「Meet Recordings」フォルダを自動検索します。
-          </p>
-        </div>
-
-        <div className="bg-amber-50 border border-amber-200 rounded-md p-4 text-sm text-amber-800 space-y-1">
-          <p className="font-medium">📁 設定について</p>
-          <p>Google Drive の「Meet Recordings」フォルダとは別の場所に録画が保存されている場合に指定してください。</p>
-          <p className="mt-1 text-xs text-amber-600">
-            ※ 未設定の場合は各ユーザーの「Meet Recordings」フォルダを自動検索します
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-gray-700">
-            Google Drive フォルダURL（移動元）
-          </label>
-          <input
-            type="url"
-            value={sourceFolderUrl}
-            onChange={(e) => setSourceFolderUrl(e.target.value)}
-            placeholder="https://drive.google.com/drive/folders/..."
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
-                       focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          />
-          <p className="text-xs text-gray-500">
-            Google Drive でフォルダを開き、URLをそのまま貼り付けてください
-          </p>
-        </div>
       </div>
 
       {/* 文字起こし設定 */}

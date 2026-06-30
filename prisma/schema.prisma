@@ -73,6 +73,8 @@ model User {
   mustChangePassword Boolean @default(false)
   // 録画ファイル移動先フォルダID（Google DriveフォルダのID）
   recordingFolderId String?
+  // 録画ファイル移動元フォルダURL（未設定時は "Meet Recordings" を自動検索）
+  sourceFolderId    String?
   // ファイル移動機能のON/OFF
   fileMovingEnabled Boolean @default(false)
   createdAt     DateTime  @default(now())

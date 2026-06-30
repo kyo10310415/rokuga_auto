@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
         role: true,
         isActive: true,
         recordingFolderId: true,
+        sourceFolderId: true,
         fileMovingEnabled: true,
         googleAccount: {
           select: {

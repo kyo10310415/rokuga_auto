@@ -21,6 +21,7 @@ interface User {
   role: UserRole
   isActive: boolean
   recordingFolderId: string | null
+  sourceFolderId: string | null
   fileMovingEnabled: boolean
   googleAccount: GoogleAccount | null
   _count: { calendarEvents: number; correctionJobs: number }
@@ -119,12 +120,13 @@ function DeleteConfirmDialog({ user, onConfirm, onCancel, loading }: DeleteDialo
 interface RecordingFolderModalProps {
   user: User
   onClose: () => void
-  onSave: (userId: string, folderUrl: string | null, fileMovingEnabled: boolean) => Promise<void>
+  onSave: (userId: string, folderUrl: string | null, sourceFolderUrl: string | null, fileMovingEnabled: boolean) => Promise<void>
   loading: boolean
 }
 
 function RecordingFolderModal({ user, onClose, onSave, loading }: RecordingFolderModalProps) {
   const [folderUrl, setFolderUrl] = useState(user.recordingFolderId ?? '')
+  const [sourceFolderUrl, setSourceFolderUrl] = useState(user.sourceFolderId ?? '')
   const [fileMovingEnabled, setFileMovingEnabled] = useState(user.fileMovingEnabled)
   const [testLoading, setTestLoading] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; details?: string } | null>(null)
@@ -251,7 +253,7 @@ function RecordingFolderModal({ user, onClose, onSave, loading }: RecordingFolde
         <div className="flex justify-end gap-3 pt-2">
           <button onClick={onClose} className="btn-secondary text-sm">キャンセル</button>
           <button
-            onClick={() => onSave(user.id, folderUrl || null, fileMovingEnabled)}
+            onClick={() => onSave(user.id, folderUrl || null, sourceFolderUrl || null, fileMovingEnabled)}
             disabled={loading}
             className="btn-primary text-sm disabled:opacity-50"
           >
@@ -321,6 +323,7 @@ export default function InstructorsClient({ users: initial, currentUserId }: Pro
   const handleSaveRecordingFolder = async (
     userId: string,
     folderUrl: string | null,
+    sourceFolderUrl: string | null,
     fileMovingEnabled: boolean
   ) => {
     setLoadingId(userId)
@@ -328,7 +331,7 @@ export default function InstructorsClient({ users: initial, currentUserId }: Pro
       const res = await fetch(`/api/admin/instructors/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recordingFolderUrl: folderUrl, fileMovingEnabled }),
+        body: JSON.stringify({ recordingFolderUrl: folderUrl, sourceFolderUrl, fileMovingEnabled }),
       })
       if (!res.ok) {
         const d = await res.json()

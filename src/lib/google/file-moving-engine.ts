@@ -17,7 +17,6 @@ const log = createLogger({ module: 'file-moving-engine' })
 
 // システム設定キー
 const TRANSCRIPTION_FOLDER_KEY = 'transcriptionFolderId'
-const SOURCE_FOLDER_KEY = 'sourceFolderId'
 
 export interface FileMoveEngineResult {
   usersProcessed: number
@@ -46,13 +45,6 @@ export async function runFileMoveForAllUsers(
   const transcriptionFolderId = transcriptionFolderUrl
     ? extractFolderIdFromUrl(transcriptionFolderUrl)
     : null
-
-  // 移動元フォルダURLをシステム設定から取得（未設定時は Meet Recordings フォルダを自動検索）
-  const sourceFolderSetting = await prisma.systemSetting.findUnique({
-    where: { key: SOURCE_FOLDER_KEY },
-  })
-  const sourceFolderUrl = sourceFolderSetting?.value ?? null
-  log.info({ sourceFolderUrl: sourceFolderUrl ?? '(自動検索)' }, '移動元フォルダ設定')
 
   // fileMovingEnabled=true かつ recordingFolderId が設定されているユーザーを取得
   const whereClause = {
@@ -89,7 +81,7 @@ export async function runFileMoveForAllUsers(
         user.id,
         user.recordingFolderId!,
         transcriptionFolderId,
-        sourceFolderUrl
+        user.sourceFolderId  // ユーザーごとの移動元フォルダURL（未設定時は自動検索）
       )
       result.usersProcessed++
       result.recordingsMoved += userResult.recordingsMoved
