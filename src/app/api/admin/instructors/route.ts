@@ -27,7 +27,14 @@ export async function GET(request: NextRequest) {
   const [users, total] = await Promise.all([
     prisma.user.findMany({
       where: { role: UserRole.USER },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        recordingFolderId: true,
+        fileMovingEnabled: true,
         googleAccount: {
           select: {
             googleEmail: true,

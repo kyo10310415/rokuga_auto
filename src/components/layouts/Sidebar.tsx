@@ -17,6 +17,7 @@ const adminNav: NavItem[] = [
   { href: '/admin/events', label: '予定一覧', icon: '📅' },
   { href: '/admin/corrections', label: '補正履歴', icon: '🔧' },
   { href: '/admin/audit-logs', label: '監査ログ', icon: '📋' },
+  { href: '/admin/settings', label: 'システム設定', icon: '⚙️' },
 ]
 
 const instructorNav: NavItem[] = [

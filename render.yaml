@@ -115,6 +115,29 @@ services:
       - key: INTERNAL_API_KEY
         sync: false
 
+  # ============================================================
+  # Cron Job 4: ファイル移動（30分ごと）
+  # ============================================================
+  - type: cron
+    name: meet-move-files
+    runtime: node
+    plan: starter
+    region: oregon
+    branch: main
+    buildCommand: "npm install"
+    schedule: "*/30 * * * *"
+    command: >
+      curl -X POST $APP_URL/api/internal/move-files
+      -H "Authorization: Bearer $INTERNAL_API_KEY"
+      -H "Content-Type: application/json"
+      --fail --silent --show-error
+
+    envVars:
+      - key: APP_URL
+        sync: false
+      - key: INTERNAL_API_KEY
+        sync: false
+
 # ============================================================
 # データベース
 # ============================================================

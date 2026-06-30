@@ -9,11 +9,13 @@ const log = createLogger({ module: 'google-client' })
 // 必要なスコープ一覧
 // - calendar.readonly: イベント一覧取得
 // - meetings.space.settings: Meet設定更新（IMPORTANT: Google Workspace必須）
+// - drive: Google Driveファイル操作（録画・文字起こしの自動移動）
 export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/meetings.space.settings',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
+  'https://www.googleapis.com/auth/drive',
 ]
 
 /**

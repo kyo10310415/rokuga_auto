@@ -20,6 +20,8 @@ interface User {
   email: string | null
   role: UserRole
   isActive: boolean
+  recordingFolderId: string | null
+  fileMovingEnabled: boolean
   googleAccount: GoogleAccount | null
   _count: { calendarEvents: number; correctionJobs: number }
 }
@@ -113,11 +115,160 @@ function DeleteConfirmDialog({ user, onConfirm, onCancel, loading }: DeleteDialo
   )
 }
 
+// 録画フォルダ設定モーダル
+interface RecordingFolderModalProps {
+  user: User
+  onClose: () => void
+  onSave: (userId: string, folderUrl: string | null, fileMovingEnabled: boolean) => Promise<void>
+  loading: boolean
+}
+
+function RecordingFolderModal({ user, onClose, onSave, loading }: RecordingFolderModalProps) {
+  const [folderUrl, setFolderUrl] = useState(user.recordingFolderId ?? '')
+  const [fileMovingEnabled, setFileMovingEnabled] = useState(user.fileMovingEnabled)
+  const [testLoading, setTestLoading] = useState(false)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string; details?: string } | null>(null)
+
+  const handleTest = async () => {
+    setTestLoading(true)
+    setTestResult(null)
+    try {
+      const res = await fetch('/api/admin/instructors/test-file-move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setTestResult({
+          success: true,
+          message: `✅ テスト完了: 録画${data.recordingsMoved}件・文字起こし${data.transcriptionsMoved}件移動`,
+          details: data.details?.map((d: { fileName: string; success: boolean; error?: string }) => `${d.success ? '✅' : '❌'} ${d.fileName}`).join('\n'),
+        })
+      } else {
+        setTestResult({ success: false, message: `❌ ${data.error || 'テスト失敗'}` })
+      }
+    } catch {
+      setTestResult({ success: false, message: '❌ 通信エラー' })
+    } finally {
+      setTestLoading(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6 space-y-5">
+        <h3 className="text-base font-semibold text-gray-900">
+          📁 録画ファイル設定 — {user.name || user.email}
+        </h3>
+
+        {/* フォルダURL入力 */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            録画保存先フォルダURL
+          </label>
+          <input
+            type="url"
+            value={folderUrl}
+            onChange={(e) => setFolderUrl(e.target.value)}
+            placeholder="https://drive.google.com/drive/folders/..."
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
+                       focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          <p className="text-xs text-gray-500">
+            Google Driveで録画を保存する親フォルダのURLを入力してください
+          </p>
+        </div>
+
+        {/* フォルダ構成説明 */}
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-xs text-blue-800 space-y-0.5">
+          <p className="font-medium">📂 自動で作成されるフォルダ構成</p>
+          <p>指定フォルダ（親）</p>
+          <p className="pl-3">└ 2026-6（年月）← 自動作成</p>
+          <p className="pl-6">└ 録画ファイル</p>
+        </div>
+
+        {/* ファイル移動トグル */}
+        <div className="flex items-center justify-between py-3 border-t border-gray-100">
+          <div>
+            <p className="text-sm font-medium text-gray-700">ファイル移動機能</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              ONにするとCron Jobで自動的にファイルが移動されます
+            </p>
+          </div>
+          <button
+            onClick={() => setFileMovingEnabled(!fileMovingEnabled)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+              ${ fileMovingEnabled ? 'bg-primary-600' : 'bg-gray-200' }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                ${ fileMovingEnabled ? 'translate-x-6' : 'translate-x-1' }`}
+            />
+          </button>
+        </div>
+
+        {/* テスト機能 */}
+        <div className="border-t border-gray-100 pt-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-700">テスト実行</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                今すぐファイル移動を1回実行して動作確認できます
+              </p>
+            </div>
+            <button
+              onClick={handleTest}
+              disabled={testLoading || !folderUrl}
+              className="text-xs px-3 py-1.5 rounded border border-primary-300
+                         text-primary-700 hover:bg-primary-50 transition-colors
+                         disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {testLoading ? '実行中...' : 'テスト実行'}
+            </button>
+          </div>
+
+          {testResult && (
+            <div className={`rounded-md p-3 text-xs ${
+              testResult.success
+                ? 'bg-green-50 border border-green-200 text-green-800'
+                : 'bg-red-50 border border-red-200 text-red-800'
+            }`}>
+              <p className="font-medium">{testResult.message}</p>
+              {testResult.details && (
+                <pre className="mt-1 whitespace-pre-wrap font-mono text-xs opacity-80">
+                  {testResult.details}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ボタン */}
+        <div className="flex justify-end gap-3 pt-2">
+          <button onClick={onClose} className="btn-secondary text-sm">キャンセル</button>
+          <button
+            onClick={() => onSave(user.id, folderUrl || null, fileMovingEnabled)}
+            disabled={loading}
+            className="btn-primary text-sm disabled:opacity-50"
+          >
+            {loading ? '保存中...' : '保存'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function InstructorsClient({ users: initial, currentUserId }: Props) {
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
+  const [recordingFolderTarget, setRecordingFolderTarget] = useState<User | null>(null)
 
   const patch = async (id: string, data: { isActive?: boolean; role?: string }) => {
     setLoadingId(id)
@@ -165,6 +316,32 @@ export default function InstructorsClient({ users: initial, currentUserId }: Pro
     const label = next ? '有効化' : '無効化'
     if (!window.confirm(`「${user.name || user.email}」を${label}しますか？`)) return
     patch(user.id, { isActive: next })
+  }
+
+  const handleSaveRecordingFolder = async (
+    userId: string,
+    folderUrl: string | null,
+    fileMovingEnabled: boolean
+  ) => {
+    setLoadingId(userId)
+    try {
+      const res = await fetch(`/api/admin/instructors/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordingFolderUrl: folderUrl, fileMovingEnabled }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        alert(d.error || '保存に失敗しました')
+        return
+      }
+      setRecordingFolderTarget(null)
+      router.refresh()
+    } catch {
+      alert('通信エラーが発生しました')
+    } finally {
+      setLoadingId(null)
+    }
   }
 
   const handleRoleChange = (user: User, newRole: 'ADMIN' | 'USER') => {
@@ -285,6 +462,21 @@ export default function InstructorsClient({ users: initial, currentUserId }: Pro
                         {isLoading ? '処理中...' : user.isActive ? '無効化' : '有効化'}
                       </button>
 
+                      {/* 録画フォルダ設定ボタン */}
+                      <button
+                        onClick={() => setRecordingFolderTarget(user)}
+                        disabled={isLoading}
+                        title={user.fileMovingEnabled ? 'ファイル移動: ON' : 'ファイル移動: OFF'}
+                        className={`text-xs px-2.5 py-1 rounded border transition-colors
+                          disabled:opacity-50 disabled:cursor-not-allowed ${
+                          user.fileMovingEnabled
+                            ? 'text-primary-700 border-primary-300 bg-primary-50'
+                            : 'text-gray-600 border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        📁 {user.fileMovingEnabled ? 'ON' : 'OFF'}
+                      </button>
+
                       {/* 削除ボタン（自分自身・ADMIN は非表示） */}
                       {!isSelf && user.role !== UserRole.ADMIN && (
                         <button
@@ -321,6 +513,15 @@ export default function InstructorsClient({ users: initial, currentUserId }: Pro
           loading={loadingId === deleteTarget.id}
           onConfirm={() => handleDelete(deleteTarget)}
           onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {recordingFolderTarget && (
+        <RecordingFolderModal
+          user={recordingFolderTarget}
+          loading={loadingId === recordingFolderTarget.id}
+          onClose={() => setRecordingFolderTarget(null)}
+          onSave={handleSaveRecordingFolder}
         />
       )}
     </>

@@ -71,6 +71,10 @@ model User {
   role          UserRole  @default(USER)
   isActive      Boolean   @default(true)
   mustChangePassword Boolean @default(false)
+  // 録画ファイル移動先フォルダID（Google DriveフォルダのID）
+  recordingFolderId String?
+  // ファイル移動機能のON/OFF
+  fileMovingEnabled Boolean @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -225,6 +229,20 @@ model CorrectionJob {
   @@index([calendarEventId])
   @@index([scheduledAt])
   @@map("correction_jobs")
+}
+
+// ============================================================
+// システム設定（全体共通設定）
+// ============================================================
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
 }
 
 // ============================================================
