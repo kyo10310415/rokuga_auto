@@ -121,6 +121,9 @@ export async function runFileMoveForUser(
     return { recordingsMoved: 0, transcriptionsMoved: 0, skipped: 0, errors: 1, details: [] }
   }
 
+  // フォルダIDの存在確認
+  logCtx.info({ recordingFolderId, recordingFolderUrl }, '録画フォルダID確認')
+
   // Meet Recordings フォルダのファイルを取得
   const files = await getMeetRecordingFiles(userId)
 

@@ -52,11 +52,13 @@ export async function getMeetRecordingFiles(userId: string): Promise<DriveFile[]
     const { client } = await getAuthenticatedClient(userId)
     const drive = google.drive({ version: 'v3', auth: client })
 
-    // "Meet Recordings" フォルダを検索
+    // "Meet Recordings" フォルダを検索（マイドライブ + 共有ドライブ両対応）
     const folderRes = await drive.files.list({
       q: `name = 'Meet Recordings' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
       fields: 'files(id, name)',
       spaces: 'drive',
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true,
     })
 
     const meetFolder = folderRes.data.files?.[0]
@@ -65,13 +67,15 @@ export async function getMeetRecordingFiles(userId: string): Promise<DriveFile[]
       return []
     }
 
-    // フォルダ内のファイルを取得
+    // フォルダ内のファイルを取得（共有ドライブ両対応）
     const filesRes = await drive.files.list({
       q: `'${meetFolder.id}' in parents and trashed = false`,
       fields: 'files(id, name, mimeType, createdTime, parents)',
       orderBy: 'createdTime desc',
       pageSize: 100,
       spaces: 'drive',
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true,
     })
 
     const files = filesRes.data.files as DriveFile[] ?? []
@@ -97,10 +101,12 @@ export async function getOrCreateYearMonthFolder(
   const drive = google.drive({ version: 'v3', auth: client })
   const folderName = `${year}-${month}`
 
-  // 既存フォルダを検索
+  // 既存フォルダを検索（共有ドライブ両対応）
   const res = await drive.files.list({
     q: `name = '${folderName}' and '${parentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
     fields: 'files(id, name)',
+    includeItemsFromAllDrives: true,
+    supportsAllDrives: true,
   })
 
   if (res.data.files && res.data.files.length > 0) {
@@ -115,6 +121,7 @@ export async function getOrCreateYearMonthFolder(
       parents: [parentFolderId],
     },
     fields: 'id',
+    supportsAllDrives: true,
   })
 
   log.info({ userId, folderName, parentFolderId }, '年月フォルダ作成')
@@ -132,10 +139,12 @@ export async function getOrCreateStudentFolder(
   const { client } = await getAuthenticatedClient(userId)
   const drive = google.drive({ version: 'v3', auth: client })
 
-  // 既存フォルダを検索
+  // 既存フォルダを検索（共有ドライブ両対応）
   const res = await drive.files.list({
     q: `name = '${studentId}' and '${parentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
     fields: 'files(id, name)',
+    includeItemsFromAllDrives: true,
+    supportsAllDrives: true,
   })
 
   if (res.data.files && res.data.files.length > 0) {
@@ -150,6 +159,7 @@ export async function getOrCreateStudentFolder(
       parents: [parentFolderId],
     },
     fields: 'id',
+    supportsAllDrives: true,
   })
 
   log.info({ userId, studentId, parentFolderId }, '学籍番号フォルダ作成')
@@ -173,6 +183,7 @@ export async function moveFile(
     addParents: newParentId,
     removeParents: currentParentId,
     fields: 'id, parents',
+    supportsAllDrives: true,
   })
 }
 
