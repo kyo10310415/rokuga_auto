@@ -8,7 +8,15 @@ export default async function InstructorsPage() {
 
   // 管理者以外の全ユーザー（自分自身も含む全員表示）
   const users = await prisma.user.findMany({
-    include: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      isActive: true,
+      recordingFolderId: true,
+      sourceFolderId: true,
+      fileMovingEnabled: true,
       googleAccount: {
         select: {
           googleEmail: true,
