@@ -167,6 +167,25 @@ function RecordingFolderModal({ user, onClose, onSave, loading }: RecordingFolde
           📁 録画ファイル設定 — {user.name || user.email}
         </h3>
 
+        {/* 移動元フォルダURL入力 */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            移動元フォルダURL
+            <span className="ml-1 text-xs font-normal text-gray-400">(未設定時は Meet Recordings を自動検索)</span>
+          </label>
+          <input
+            type="url"
+            value={sourceFolderUrl}
+            onChange={(e) => setSourceFolderUrl(e.target.value)}
+            placeholder="https://drive.google.com/drive/folders/..."
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
+                       focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          <p className="text-xs text-gray-500">
+            録画・文字起こしファイルの取得元となる Google Drive フォルダです
+          </p>
+        </div>
+
         {/* フォルダURL入力 */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-gray-700">
