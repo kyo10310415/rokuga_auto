@@ -45,33 +45,53 @@ export function extractFolderIdFromUrl(url: string): string | null {
 }
 
 /**
- * Meet Recordings フォルダ内のファイルを取得
+ * 移動元フォルダ内のファイルを取得
+ * @param userId         対象ユーザーID
+ * @param sourceFolderUrl 移動元フォルダURL（指定時はそのフォルダを使用）
+ *                        未指定時は "Meet Recordings" フォルダを自動検索（後方互換）
  */
-export async function getMeetRecordingFiles(userId: string): Promise<DriveFile[]> {
+export async function getMeetRecordingFiles(
+  userId: string,
+  sourceFolderUrl?: string | null
+): Promise<DriveFile[]> {
   const logCtx = createLogger({ module: 'drive-service', userId })
 
   try {
     const { client } = await getAuthenticatedClient(userId)
     const drive = google.drive({ version: 'v3', auth: client })
 
-    // "Meet Recordings" フォルダを検索（マイドライブ + 共有ドライブ両対応）
-    const folderRes = await drive.files.list({
-      q: `name = 'Meet Recordings' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-      fields: 'files(id, name)',
-      spaces: 'drive',
-      includeItemsFromAllDrives: true,
-      supportsAllDrives: true,
-    })
+    let sourceFolderId: string | null = null
 
-    const meetFolder = folderRes.data.files?.[0]
-    if (!meetFolder?.id) {
-      logCtx.info('Meet Recordings フォルダが見つかりません')
-      return []
+    if (sourceFolderUrl) {
+      // 管理者が指定した移動元フォルダURLからIDを抽出
+      sourceFolderId = extractFolderIdFromUrl(sourceFolderUrl)
+      if (!sourceFolderId) {
+        logCtx.warn({ sourceFolderUrl }, '移動元フォルダURLからIDを抽出できません')
+        return []
+      }
+      logCtx.info({ sourceFolderId, sourceFolderUrl }, '指定された移動元フォルダを使用')
+    } else {
+      // フォールバック: "Meet Recordings" フォルダを自動検索
+      const folderRes = await drive.files.list({
+        q: `name = 'Meet Recordings' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+        fields: 'files(id, name)',
+        spaces: 'drive',
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true,
+      })
+
+      const meetFolder = folderRes.data.files?.[0]
+      if (!meetFolder?.id) {
+        logCtx.info('Meet Recordings フォルダが見つかりません')
+        return []
+      }
+      sourceFolderId = meetFolder.id
+      logCtx.info({ sourceFolderId }, 'Meet Recordings フォルダを自動検出')
     }
 
     // フォルダ内のファイルを取得（共有ドライブ両対応）
     const filesRes = await drive.files.list({
-      q: `'${meetFolder.id}' in parents and trashed = false`,
+      q: `'${sourceFolderId}' in parents and trashed = false`,
       fields: 'files(id, name, mimeType, createdTime, parents)',
       orderBy: 'createdTime desc',
       pageSize: 100,
@@ -81,10 +101,10 @@ export async function getMeetRecordingFiles(userId: string): Promise<DriveFile[]
     })
 
     const files = filesRes.data.files as DriveFile[] ?? []
-    logCtx.info({ count: files.length }, 'Meet Recordings ファイル取得完了')
+    logCtx.info({ count: files.length, sourceFolderId }, '移動元フォルダ ファイル取得完了')
     return files
   } catch (err) {
-    logCtx.error({ err }, 'Meet Recordings ファイル取得失敗')
+    logCtx.error({ err }, '移動元フォルダ ファイル取得失敗')
     throw err
   }
 }
