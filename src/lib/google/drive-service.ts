@@ -9,6 +9,8 @@ const log = createLogger({ module: 'drive-service' })
 // 文字起こし: "WannaVレッスン予約 (石山光司) - 2026/06/29 18:58 JST - Gemini によるメモ"
 const RECORDING_PATTERN = /Recording$/
 const TRANSCRIPTION_PATTERN = /Gemini によるメモ$/
+// 録画ファイルの追加フィルタ: ファイル名に「レッスン」を含むもののみ移動対象
+const RECORDING_LESSON_KEYWORD = 'レッスン'
 
 export interface DriveFile {
   id: string
@@ -203,9 +205,11 @@ export function extractDateFromFileName(fileName: string): { year: number; month
 
 /**
  * ファイルが録画か文字起こしかを判定
+ * 録画判定: 末尾が「Recording」かつファイル名に「レッスン」を含む
+ * 文字起こし判定: 末尾が「Gemini によるメモ」
  */
 export function classifyFile(fileName: string): 'recording' | 'transcription' | 'unknown' {
-  if (RECORDING_PATTERN.test(fileName)) return 'recording'
+  if (RECORDING_PATTERN.test(fileName) && fileName.includes(RECORDING_LESSON_KEYWORD)) return 'recording'
   if (TRANSCRIPTION_PATTERN.test(fileName)) return 'transcription'
   return 'unknown'
 }
