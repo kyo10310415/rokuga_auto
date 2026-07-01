@@ -9,8 +9,9 @@ const log = createLogger({ module: 'drive-service' })
 // 文字起こし: "WannaVレッスン予約 (石山光司) - 2026/06/29 18:58 JST - Gemini によるメモ"
 const RECORDING_PATTERN = /Recording$/
 const TRANSCRIPTION_PATTERN = /Gemini によるメモ$/
-// 録画ファイルの追加フィルタ: ファイル名に「レッスン」を含むもののみ移動対象
-const RECORDING_LESSON_KEYWORD = 'レッスン'
+// 移動対象フィルタ: ファイル名にいずれかのキーワードを含むもののみ対象
+// 録画・文字起こし両方に適用
+const MOVE_TARGET_KEYWORDS = ['レッスン', 'Proプラン', 'PROプラン']
 
 export interface DriveFile {
   id: string
@@ -225,12 +226,14 @@ export function extractDateFromFileName(fileName: string): { year: number; month
 
 /**
  * ファイルが録画か文字起こしかを判定
- * 録画判定: 末尾が「Recording」かつファイル名に「レッスン」を含む
- * 文字起こし判定: 末尾が「Gemini によるメモ」
+ * 録画判定: 末尾が「Recording」かつ MOVE_TARGET_KEYWORDS のいずれかを含む
+ * 文字起こし判定: 末尾が「Gemini によるメモ」かつ MOVE_TARGET_KEYWORDS のいずれかを含む
+ * 対象キーワード: レッスン / Proプラン / PROプラン
  */
 export function classifyFile(fileName: string): 'recording' | 'transcription' | 'unknown' {
-  if (RECORDING_PATTERN.test(fileName) && fileName.includes(RECORDING_LESSON_KEYWORD)) return 'recording'
-  if (TRANSCRIPTION_PATTERN.test(fileName)) return 'transcription'
+  const isTarget = MOVE_TARGET_KEYWORDS.some((kw) => fileName.includes(kw))
+  if (RECORDING_PATTERN.test(fileName) && isTarget) return 'recording'
+  if (TRANSCRIPTION_PATTERN.test(fileName) && isTarget) return 'transcription'
   return 'unknown'
 }
 
