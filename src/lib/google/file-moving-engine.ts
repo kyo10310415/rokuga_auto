@@ -19,6 +19,7 @@ const log = createLogger({ module: 'file-moving-engine' })
 
 // システム設定キー
 const TRANSCRIPTION_FOLDER_KEY = 'transcriptionFolderId'
+const JST_OFFSET = '+09:00'
 
 export interface FileMoveEngineResult {
   usersProcessed: number
@@ -195,7 +196,6 @@ export async function runFileMoveForUser(
             // カレンダーイベントの説明欄から学籍番号を取得
             const studentId = await findStudentIdForFile(userId, file.name)
             if (!studentId) {
-              logCtx.warn({ fileName: file.name }, '学籍番号取得失敗: スキップ')
               skipped++
               continue
             }
@@ -271,26 +271,80 @@ async function findStudentIdForFile(
   userId: string,
   fileName: string
 ): Promise<string | null> {
+  const logCtx = createLogger({ module: 'file-moving-engine', userId, fileName })
+
   // ファイル名から日付を抽出
   const dateMatch = fileName.match(/(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2})/)
-  if (!dateMatch) return null
+  if (!dateMatch) {
+    logCtx.warn('ファイル名から日時を抽出できないため学籍番号取得をスキップ')
+    return null
+  }
 
   const [, year, month, day, hour, minute] = dateMatch
-  // 前後10分の範囲でイベントを検索
-  const fileTime = new Date(`${year}-${month}-${day}T${hour}:${minute}:00`)
+  // ファイル名の日時はJST。実行環境のタイムゾーンに依存しないようオフセットを明示する
+  const fileTime = new Date(`${year}-${month}-${day}T${hour}:${minute}:00${JST_OFFSET}`)
+  if (Number.isNaN(fileTime.getTime())) {
+    logCtx.warn('ファイル名の日時が不正なため学籍番号取得をスキップ')
+    return null
+  }
+
+  // ファイル生成時刻のずれを考慮し、前後10分の範囲でイベントを検索
   const timeFrom = new Date(fileTime.getTime() - 10 * 60 * 1000)
   const timeTo = new Date(fileTime.getTime() + 10 * 60 * 1000)
 
-  const event = await prisma.calendarEvent.findFirst({
+  const events = await prisma.calendarEvent.findMany({
     where: {
       userId,
       startTime: { gte: timeFrom, lte: timeTo },
-      description: { not: null },
     },
     orderBy: { startTime: 'asc' },
+    select: {
+      id: true,
+      eventTitle: true,
+      startTime: true,
+      description: true,
+    },
   })
 
-  if (!event?.description) return null
+  if (events.length === 0) {
+    logCtx.warn(
+      {
+        fileTime: fileTime.toISOString(),
+        timeFrom: timeFrom.toISOString(),
+        timeTo: timeTo.toISOString(),
+      },
+      '対応するCalendarEventが見つからないため学籍番号取得をスキップ'
+    )
+    return null
+  }
 
-  return extractStudentIdFromDescription(event.description)
+  let hasDescription = false
+
+  for (const event of events) {
+    if (!event.description) continue
+    hasDescription = true
+
+    const studentId = extractStudentIdFromDescription(event.description)
+    if (studentId) return studentId
+  }
+
+  const eventSummaries = events.map((event) => ({
+    id: event.id,
+    eventTitle: event.eventTitle,
+    startTime: event.startTime.toISOString(),
+  }))
+
+  if (!hasDescription) {
+    logCtx.warn(
+      { events: eventSummaries },
+      'CalendarEventのdescriptionが空のため学籍番号取得をスキップ'
+    )
+    return null
+  }
+
+  logCtx.warn(
+    { events: eventSummaries },
+    'CalendarEventのdescriptionから学籍番号を抽出できないためスキップ'
+  )
+  return null
 }

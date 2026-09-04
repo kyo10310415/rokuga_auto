@@ -99,8 +99,16 @@ async function scanUserEvents(userId: string, googleEmail: string): Promise<{
     })
     
     if (existingEvent) {
-      // 既存イベント: 開始時刻の更新のみ（補正済みは再実行しない）
+      const description = event.description ?? null
+
+      // 補正済みイベントもdescriptionに変更があれば同期する
       if (existingEvent.detectionStatus === DetectionStatus.READY) {
+        if (existingEvent.description !== description) {
+          await prisma.calendarEvent.update({
+            where: { id: existingEvent.id },
+            data: { description },
+          })
+        }
         continue // 補正済みはスキップ
       }
       
@@ -108,6 +116,7 @@ async function scanUserEvents(userId: string, googleEmail: string): Promise<{
         where: { id: existingEvent.id },
         data: {
           eventTitle: event.title,
+          description,
           startTime: event.startTime,
           endTime: event.endTime,
           meetLink: event.meetLink,
@@ -135,7 +144,7 @@ async function scanUserEvents(userId: string, googleEmail: string): Promise<{
         calendarId: event.calendarId,
         googleEventId: event.id,
         eventTitle: event.title,
-        description: event.description,
+        description: event.description ?? null,
         startTime: event.startTime,
         endTime: event.endTime,
         meetLink: event.meetLink,
@@ -147,6 +156,7 @@ async function scanUserEvents(userId: string, googleEmail: string): Promise<{
       },
       update: {
         eventTitle: event.title,
+        description: event.description ?? null,
         startTime: event.startTime,
         endTime: event.endTime,
         meetLink: event.meetLink,
