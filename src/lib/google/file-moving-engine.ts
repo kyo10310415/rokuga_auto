@@ -84,7 +84,7 @@ export async function runFileMoveForAllUsers(
         user.id,
         user.recordingFolderId!,
         transcriptionFolderId,
-        user.sourceFolderId  // ユーザーごとの移動元フォルダURL（未設定時は自動検索）
+        user.sourceFolderId  // 自動検出ルートに追加するユーザーごとの移動元フォルダURL
       )
       result.usersProcessed++
       result.recordingsMoved += userResult.recordingsMoved
@@ -129,7 +129,7 @@ export async function runFileMoveForUser(
   // フォルダIDの存在確認
   logCtx.info({ recordingFolderId, recordingFolderUrl }, '録画フォルダID確認')
 
-  // 移動元ルート直下のサブフォルダを取得（未指定時は Google Meet を自動検索）
+  // 指定ルートと、認証ユーザーのマイドライブ直下にある全Google Meetルートを探索
   const sourceFolders = await getMeetSourceFolders(userId, sourceFolderUrl)
 
   let recordingsMoved = 0
@@ -144,7 +144,11 @@ export async function runFileMoveForUser(
         { sourceFolderId: sourceFolder.id, sourceFolderName: sourceFolder.name },
         '移動元サブフォルダ処理開始'
       )
-      const files = await getFilesInFolder(userId, sourceFolder.id)
+      const files = await getFilesInFolder(
+        userId,
+        sourceFolder.id,
+        sourceFolder.ownedFilesOnly
+      )
       let hasMoveFailure = false
 
       for (const file of files) {

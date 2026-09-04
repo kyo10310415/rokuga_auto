@@ -11,8 +11,9 @@ const RECORDING_PATTERN = /Recording$/
 const TRANSCRIPTION_PATTERN = /Gemini によるメモ$/
 // 移動対象フィルタ: ファイル名にいずれかのキーワードを含むもののみ対象
 // 録画・文字起こし両方に適用
-const MOVE_TARGET_KEYWORDS = ['レッスン', 'Proプラン', 'PROプラン']
+const MOVE_TARGET_KEYWORDS = ['レッスン', 'Proプラン', 'PROプラン', '所属生']
 const DRIVE_FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder'
+const DRIVE_SHORTCUT_MIME_TYPE = 'application/vnd.google-apps.shortcut'
 const DEFAULT_SOURCE_FOLDER_NAME = 'Google Meet'
 
 export interface DriveFile {
@@ -26,6 +27,14 @@ export interface DriveFile {
 export interface DriveFolder {
   id: string
   name: string
+  sourceRootId: string
+  ownedFilesOnly: boolean
+}
+
+interface DriveSourceRoot {
+  id: string
+  name: string
+  ownedFilesOnly: boolean
 }
 
 export interface MoveResult {
@@ -55,8 +64,9 @@ export function extractFolderIdFromUrl(url: string): string | null {
 /**
  * 移動元ルート直下のサブフォルダを取得
  * @param userId          対象ユーザーID
- * @param sourceFolderUrl 移動元ルートフォルダURL（指定時はそのフォルダを使用）
- *                        未指定時は "Google Meet" フォルダを自動検索
+ * @param sourceFolderUrl 追加の移動元ルートフォルダURL
+ *                        指定の有無にかかわらず、認証ユーザーのマイドライブ直下にある
+ *                        すべての "Google Meet" フォルダも自動検索する
  */
 export async function getMeetSourceFolders(
   userId: string,
@@ -67,84 +77,116 @@ export async function getMeetSourceFolders(
   try {
     const { client } = await getAuthenticatedClient(userId)
     const drive = google.drive({ version: 'v3', auth: client })
+    const sourceRoots = new Map<string, DriveSourceRoot>()
 
-    let sourceFolderId: string | null = null
-
+    // 管理者指定のルートは自動検出ルートに追加して処理する
     if (sourceFolderUrl) {
-      // 管理者が指定した移動元フォルダURLからIDを抽出
-      sourceFolderId = extractFolderIdFromUrl(sourceFolderUrl)
-      if (!sourceFolderId) {
+      const configuredFolderId = extractFolderIdFromUrl(sourceFolderUrl)
+      if (!configuredFolderId) {
         logCtx.warn({ sourceFolderUrl }, '移動元フォルダURLからIDを抽出できません')
-        return []
+      } else {
+        sourceRoots.set(configuredFolderId, {
+          id: configuredFolderId,
+          name: '指定された移動元フォルダ',
+          ownedFilesOnly: false,
+        })
+        logCtx.info(
+          { sourceFolderId: configuredFolderId, sourceFolderUrl },
+          '指定された移動元フォルダを探索対象に追加'
+        )
       }
-      logCtx.info({ sourceFolderId, sourceFolderUrl }, '指定された移動元フォルダを使用')
-    } else {
-      // 同名フォルダが複数ある場合に誤ったルートを選ばないよう、最大2件まで取得
-      const sourceFolders: DriveFolder[] = []
+    }
+
+    // このユーザーのマイドライブ直下にある同名フォルダをすべて取得
+    let autoDiscoveryError: unknown = null
+    try {
       let pageToken: string | undefined
 
       do {
         const folderRes = await drive.files.list({
-          q: `name = '${DEFAULT_SOURCE_FOLDER_NAME}' and mimeType = '${DRIVE_FOLDER_MIME_TYPE}' and trashed = false`,
-          fields: 'nextPageToken, files(id, name)',
-          pageSize: 2,
+          q: `name = '${DEFAULT_SOURCE_FOLDER_NAME}' and 'root' in parents and mimeType = '${DRIVE_FOLDER_MIME_TYPE}' and trashed = false`,
+          fields: 'nextPageToken, files(id, name, ownedByMe)',
+          pageSize: 100,
           pageToken,
           spaces: 'drive',
+          corpora: 'user',
           includeItemsFromAllDrives: true,
           supportsAllDrives: true,
         })
 
         for (const folder of folderRes.data.files ?? []) {
-          if (folder.id && folder.name) {
-            sourceFolders.push({ id: folder.id, name: folder.name })
+          if (folder.id && folder.name && folder.ownedByMe === true) {
+            sourceRoots.set(folder.id, {
+              id: folder.id,
+              name: folder.name,
+              // マイドライブ直下の自動検出ルートでは本人所有の実ファイルだけを扱う
+              ownedFilesOnly: true,
+            })
           }
         }
         pageToken = folderRes.data.nextPageToken ?? undefined
-      } while (pageToken && sourceFolders.length < 2)
-
-      if (sourceFolders.length === 0) {
-        logCtx.info(`${DEFAULT_SOURCE_FOLDER_NAME} フォルダが見つかりません`)
-        return []
-      }
-
-      if (sourceFolders.length >= 2) {
-        logCtx.warn(
-          { count: sourceFolders.length },
-          `${DEFAULT_SOURCE_FOLDER_NAME} フォルダが複数見つかったため処理をスキップ`
-        )
-        return []
-      }
-
-      sourceFolderId = sourceFolders[0].id
-      logCtx.info({ sourceFolderId }, `${DEFAULT_SOURCE_FOLDER_NAME} フォルダを自動検出`)
+      } while (pageToken)
+    } catch (err) {
+      autoDiscoveryError = err
+      logCtx.error({ err }, `${DEFAULT_SOURCE_FOLDER_NAME} フォルダ自動検索失敗`)
     }
 
-    // 移動元ルート直下のサブフォルダだけを取得（共有ドライブ両対応）
-    const folders: DriveFolder[] = []
-    let pageToken: string | undefined
-
-    do {
-      const foldersRes = await drive.files.list({
-        q: `'${sourceFolderId}' in parents and mimeType = '${DRIVE_FOLDER_MIME_TYPE}' and trashed = false`,
-        fields: 'nextPageToken, files(id, name)',
-        orderBy: 'createdTime desc',
-        pageSize: 100,
-        pageToken,
-        spaces: 'drive',
-        includeItemsFromAllDrives: true,
-        supportsAllDrives: true,
-      })
-
-      for (const folder of foldersRes.data.files ?? []) {
-        if (folder.id && folder.name) {
-          folders.push({ id: folder.id, name: folder.name })
-        }
+    if (sourceRoots.size === 0) {
+      if (autoDiscoveryError) {
+        throw autoDiscoveryError
       }
-      pageToken = foldersRes.data.nextPageToken ?? undefined
-    } while (pageToken)
+      logCtx.info('移動元ルートフォルダが見つかりません')
+      return []
+    }
 
-    logCtx.info({ count: folders.length, sourceFolderId }, '移動元サブフォルダ取得完了')
-    return folders
+    const roots = [...sourceRoots.values()]
+    logCtx.info(
+      { count: roots.length, sourceRootIds: roots.map((root) => root.id) },
+      '移動元ルートフォルダ取得完了'
+    )
+
+    // 各ルート直下のサブフォルダだけを取得（共有ドライブ両対応）
+    const folders = new Map<string, DriveFolder>()
+
+    for (const sourceRoot of roots) {
+      try {
+        let pageToken: string | undefined
+
+        do {
+          const foldersRes = await drive.files.list({
+            q: `'${sourceRoot.id}' in parents and mimeType = '${DRIVE_FOLDER_MIME_TYPE}' and trashed = false`,
+            fields: 'nextPageToken, files(id, name)',
+            orderBy: 'createdTime desc',
+            pageSize: 100,
+            pageToken,
+            spaces: 'drive',
+            includeItemsFromAllDrives: true,
+            supportsAllDrives: true,
+          })
+
+          for (const folder of foldersRes.data.files ?? []) {
+            if (folder.id && folder.name) {
+              folders.set(folder.id, {
+                id: folder.id,
+                name: folder.name,
+                sourceRootId: sourceRoot.id,
+                ownedFilesOnly: sourceRoot.ownedFilesOnly,
+              })
+            }
+          }
+          pageToken = foldersRes.data.nextPageToken ?? undefined
+        } while (pageToken)
+      } catch (err) {
+        logCtx.error(
+          { sourceRootId: sourceRoot.id, sourceRootName: sourceRoot.name, err },
+          '移動元ルート内のサブフォルダ取得失敗'
+        )
+      }
+    }
+
+    const sourceFolders = [...folders.values()]
+    logCtx.info({ count: sourceFolders.length }, '移動元サブフォルダ取得完了')
+    return sourceFolders
   } catch (err) {
     logCtx.error({ err }, '移動元サブフォルダ取得失敗')
     throw err
@@ -156,7 +198,8 @@ export async function getMeetSourceFolders(
  */
 export async function getFilesInFolder(
   userId: string,
-  folderId: string
+  folderId: string,
+  ownedFilesOnly = false
 ): Promise<DriveFile[]> {
   const logCtx = createLogger({ module: 'drive-service', userId, folderId })
 
@@ -168,8 +211,8 @@ export async function getFilesInFolder(
 
     do {
       const filesRes = await drive.files.list({
-        q: `'${folderId}' in parents and mimeType != '${DRIVE_FOLDER_MIME_TYPE}' and trashed = false`,
-        fields: 'nextPageToken, files(id, name, mimeType, createdTime, parents)',
+        q: `'${folderId}' in parents and mimeType != '${DRIVE_FOLDER_MIME_TYPE}' and mimeType != '${DRIVE_SHORTCUT_MIME_TYPE}' and trashed = false`,
+        fields: 'nextPageToken, files(id, name, mimeType, createdTime, parents, ownedByMe)',
         orderBy: 'createdTime desc',
         pageSize: 100,
         pageToken,
@@ -179,6 +222,11 @@ export async function getFilesInFolder(
       })
 
       for (const file of filesRes.data.files ?? []) {
+        if (ownedFilesOnly && file.ownedByMe !== true) {
+          logCtx.info({ fileId: file.id, fileName: file.name }, '本人所有ではないファイルをスキップ')
+          continue
+        }
+
         if (file.id && file.name && file.mimeType && file.createdTime) {
           files.push({
             id: file.id,
@@ -351,7 +399,7 @@ export function extractDateFromFileName(fileName: string): { year: number; month
  * ファイルが録画か文字起こしかを判定
  * 録画判定: 末尾が「Recording」かつ MOVE_TARGET_KEYWORDS のいずれかを含む
  * 文字起こし判定: 末尾が「Gemini によるメモ」かつ MOVE_TARGET_KEYWORDS のいずれかを含む
- * 対象キーワード: レッスン / Proプラン / PROプラン
+ * 対象キーワード: レッスン / Proプラン / PROプラン / 所属生
  */
 export function classifyFile(fileName: string): 'recording' | 'transcription' | 'unknown' {
   const isTarget = MOVE_TARGET_KEYWORDS.some((kw) => fileName.includes(kw))
