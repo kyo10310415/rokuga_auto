@@ -2,7 +2,9 @@ import { prisma } from '@/lib/prisma'
 import { GoogleAccountStatus } from '@prisma/client'
 import { createLogger } from '@/lib/logger'
 import {
-  getMeetRecordingFiles,
+  getMeetSourceFolders,
+  getFilesInFolder,
+  deleteFolderIfEmpty,
   getOrCreateYearMonthFolder,
   getOrCreateStudentFolder,
   moveFile,
@@ -126,8 +128,8 @@ export async function runFileMoveForUser(
   // フォルダIDの存在確認
   logCtx.info({ recordingFolderId, recordingFolderUrl }, '録画フォルダID確認')
 
-  // 移動元フォルダのファイルを取得（sourceFolderUrl指定時はそのフォルダ、未指定時は Meet Recordings を自動検索）
-  const files = await getMeetRecordingFiles(userId, sourceFolderUrl)
+  // 移動元ルート直下のサブフォルダを取得（未指定時は Google Meet を自動検索）
+  const sourceFolders = await getMeetSourceFolders(userId, sourceFolderUrl)
 
   let recordingsMoved = 0
   let transcriptionsMoved = 0
@@ -135,90 +137,126 @@ export async function runFileMoveForUser(
   let errors = 0
   const details: MoveResult[] = []
 
-  for (const file of files) {
-    const fileType = classifyFile(file.name)
-
-    if (fileType === 'unknown') {
-      logCtx.info({ fileName: file.name }, '対象外ファイルをスキップ')
-      skipped++
-      continue
-    }
-
+  for (const sourceFolder of sourceFolders) {
     try {
-      if (fileType === 'recording') {
-        // 録画ファイル: ユーザー指定フォルダ/年月フォルダに移動
-        const date = extractDateFromFileName(file.name)
-        if (!date) {
-          logCtx.warn({ fileName: file.name }, '日付抽出失敗: スキップ')
+      logCtx.info(
+        { sourceFolderId: sourceFolder.id, sourceFolderName: sourceFolder.name },
+        '移動元サブフォルダ処理開始'
+      )
+      const files = await getFilesInFolder(userId, sourceFolder.id)
+      let hasMoveFailure = false
+
+      for (const file of files) {
+        const fileType = classifyFile(file.name)
+
+        if (fileType === 'unknown') {
+          logCtx.info({ fileName: file.name }, '対象外ファイルをスキップ')
           skipped++
           continue
         }
 
-        const yearMonthFolderId = await getOrCreateYearMonthFolder(
-          userId,
-          recordingFolderId,
-          date.year,
-          date.month
+        try {
+          if (fileType === 'recording') {
+            // 録画ファイル: ユーザー指定フォルダ/年月フォルダに移動
+            const date = extractDateFromFileName(file.name)
+            if (!date) {
+              logCtx.warn({ fileName: file.name }, '日付抽出失敗: スキップ')
+              skipped++
+              continue
+            }
+
+            const yearMonthFolderId = await getOrCreateYearMonthFolder(
+              userId,
+              recordingFolderId,
+              date.year,
+              date.month
+            )
+
+            const currentParentId = file.parents?.[0] ?? sourceFolder.id
+            await moveFile(userId, file.id, currentParentId, yearMonthFolderId)
+
+            logCtx.info({ fileName: file.name, dest: `${date.year}-${date.month}` }, '録画移動完了')
+            recordingsMoved++
+            details.push({
+              fileId: file.id,
+              fileName: file.name,
+              type: 'recording',
+              success: true,
+              destinationFolderId: yearMonthFolderId,
+            })
+          } else if (fileType === 'transcription') {
+            // 文字起こし: 共通フォルダ/学籍番号フォルダに移動
+            if (!transcriptionFolderId) {
+              logCtx.warn('文字起こしフォルダ未設定: スキップ')
+              skipped++
+              continue
+            }
+
+            // カレンダーイベントの説明欄から学籍番号を取得
+            const studentId = await findStudentIdForFile(userId, file.name)
+            if (!studentId) {
+              logCtx.warn({ fileName: file.name }, '学籍番号取得失敗: スキップ')
+              skipped++
+              continue
+            }
+
+            const studentFolderId = await getOrCreateStudentFolder(
+              userId,
+              transcriptionFolderId,
+              studentId
+            )
+
+            const currentParentId = file.parents?.[0] ?? sourceFolder.id
+            await moveFile(userId, file.id, currentParentId, studentFolderId)
+
+            logCtx.info({ fileName: file.name, studentId }, '文字起こし移動完了')
+            transcriptionsMoved++
+            details.push({
+              fileId: file.id,
+              fileName: file.name,
+              type: 'transcription',
+              success: true,
+              destinationFolderId: studentFolderId,
+            })
+          }
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err)
+          logCtx.error({ fileName: file.name, sourceFolderId: sourceFolder.id, err }, 'ファイル移動失敗')
+          hasMoveFailure = true
+          errors++
+          details.push({
+            fileId: file.id,
+            fileName: file.name,
+            type: fileType,
+            success: false,
+            error: errorMessage,
+          })
+        }
+      }
+
+      if (hasMoveFailure) {
+        logCtx.warn(
+          { sourceFolderId: sourceFolder.id, sourceFolderName: sourceFolder.name },
+          'ファイル移動に失敗したためサブフォルダ削除をスキップ'
         )
+        continue
+      }
 
-        const currentParentId = file.parents?.[0] ?? ''
-        await moveFile(userId, file.id, currentParentId, yearMonthFolderId)
-
-        logCtx.info({ fileName: file.name, dest: `${date.year}-${date.month}` }, '録画移動完了')
-        recordingsMoved++
-        details.push({
-          fileId: file.id,
-          fileName: file.name,
-          type: 'recording',
-          success: true,
-          destinationFolderId: yearMonthFolderId,
-        })
-      } else if (fileType === 'transcription') {
-        // 文字起こし: 共通フォルダ/学籍番号フォルダに移動
-        if (!transcriptionFolderId) {
-          logCtx.warn('文字起こしフォルダ未設定: スキップ')
-          skipped++
-          continue
-        }
-
-        // カレンダーイベントの説明欄から学籍番号を取得
-        const studentId = await findStudentIdForFile(userId, file.name)
-        if (!studentId) {
-          logCtx.warn({ fileName: file.name }, '学籍番号取得失敗: スキップ')
-          skipped++
-          continue
-        }
-
-        const studentFolderId = await getOrCreateStudentFolder(
-          userId,
-          transcriptionFolderId,
-          studentId
+      try {
+        await deleteFolderIfEmpty(userId, sourceFolder.id)
+      } catch (err) {
+        logCtx.error(
+          { sourceFolderId: sourceFolder.id, sourceFolderName: sourceFolder.name, err },
+          '空サブフォルダ削除失敗'
         )
-
-        const currentParentId = file.parents?.[0] ?? ''
-        await moveFile(userId, file.id, currentParentId, studentFolderId)
-
-        logCtx.info({ fileName: file.name, studentId }, '文字起こし移動完了')
-        transcriptionsMoved++
-        details.push({
-          fileId: file.id,
-          fileName: file.name,
-          type: 'transcription',
-          success: true,
-          destinationFolderId: studentFolderId,
-        })
+        errors++
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      logCtx.error({ fileName: file.name, err }, 'ファイル移動失敗')
+      logCtx.error(
+        { sourceFolderId: sourceFolder.id, sourceFolderName: sourceFolder.name, err },
+        '移動元サブフォルダ処理失敗'
+      )
       errors++
-      details.push({
-        fileId: file.id,
-        fileName: file.name,
-        type: fileType,
-        success: false,
-        error: errorMessage,
-      })
     }
   }
 

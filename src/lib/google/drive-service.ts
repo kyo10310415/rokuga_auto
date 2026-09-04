@@ -12,6 +12,8 @@ const TRANSCRIPTION_PATTERN = /Gemini によるメモ$/
 // 移動対象フィルタ: ファイル名にいずれかのキーワードを含むもののみ対象
 // 録画・文字起こし両方に適用
 const MOVE_TARGET_KEYWORDS = ['レッスン', 'Proプラン', 'PROプラン']
+const DRIVE_FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder'
+const DEFAULT_SOURCE_FOLDER_NAME = 'Google Meet'
 
 export interface DriveFile {
   id: string
@@ -19,6 +21,11 @@ export interface DriveFile {
   mimeType: string
   createdTime: string
   parents?: string[]
+}
+
+export interface DriveFolder {
+  id: string
+  name: string
 }
 
 export interface MoveResult {
@@ -46,15 +53,15 @@ export function extractFolderIdFromUrl(url: string): string | null {
 }
 
 /**
- * 移動元フォルダ内のファイルを取得
- * @param userId         対象ユーザーID
- * @param sourceFolderUrl 移動元フォルダURL（指定時はそのフォルダを使用）
- *                        未指定時は "Meet Recordings" フォルダを自動検索（後方互換）
+ * 移動元ルート直下のサブフォルダを取得
+ * @param userId          対象ユーザーID
+ * @param sourceFolderUrl 移動元ルートフォルダURL（指定時はそのフォルダを使用）
+ *                        未指定時は "Google Meet" フォルダを自動検索
  */
-export async function getMeetRecordingFiles(
+export async function getMeetSourceFolders(
   userId: string,
   sourceFolderUrl?: string | null
-): Promise<DriveFile[]> {
+): Promise<DriveFolder[]> {
   const logCtx = createLogger({ module: 'drive-service', userId })
 
   try {
@@ -72,42 +79,158 @@ export async function getMeetRecordingFiles(
       }
       logCtx.info({ sourceFolderId, sourceFolderUrl }, '指定された移動元フォルダを使用')
     } else {
-      // フォールバック: "Meet Recordings" フォルダを自動検索
-      const folderRes = await drive.files.list({
-        q: `name = 'Meet Recordings' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-        fields: 'files(id, name)',
+      // 同名フォルダが複数ある場合に誤ったルートを選ばないよう、最大2件まで取得
+      const sourceFolders: DriveFolder[] = []
+      let pageToken: string | undefined
+
+      do {
+        const folderRes = await drive.files.list({
+          q: `name = '${DEFAULT_SOURCE_FOLDER_NAME}' and mimeType = '${DRIVE_FOLDER_MIME_TYPE}' and trashed = false`,
+          fields: 'nextPageToken, files(id, name)',
+          pageSize: 2,
+          pageToken,
+          spaces: 'drive',
+          includeItemsFromAllDrives: true,
+          supportsAllDrives: true,
+        })
+
+        for (const folder of folderRes.data.files ?? []) {
+          if (folder.id && folder.name) {
+            sourceFolders.push({ id: folder.id, name: folder.name })
+          }
+        }
+        pageToken = folderRes.data.nextPageToken ?? undefined
+      } while (pageToken && sourceFolders.length < 2)
+
+      if (sourceFolders.length === 0) {
+        logCtx.info(`${DEFAULT_SOURCE_FOLDER_NAME} フォルダが見つかりません`)
+        return []
+      }
+
+      if (sourceFolders.length >= 2) {
+        logCtx.warn(
+          { count: sourceFolders.length },
+          `${DEFAULT_SOURCE_FOLDER_NAME} フォルダが複数見つかったため処理をスキップ`
+        )
+        return []
+      }
+
+      sourceFolderId = sourceFolders[0].id
+      logCtx.info({ sourceFolderId }, `${DEFAULT_SOURCE_FOLDER_NAME} フォルダを自動検出`)
+    }
+
+    // 移動元ルート直下のサブフォルダだけを取得（共有ドライブ両対応）
+    const folders: DriveFolder[] = []
+    let pageToken: string | undefined
+
+    do {
+      const foldersRes = await drive.files.list({
+        q: `'${sourceFolderId}' in parents and mimeType = '${DRIVE_FOLDER_MIME_TYPE}' and trashed = false`,
+        fields: 'nextPageToken, files(id, name)',
+        orderBy: 'createdTime desc',
+        pageSize: 100,
+        pageToken,
         spaces: 'drive',
         includeItemsFromAllDrives: true,
         supportsAllDrives: true,
       })
 
-      const meetFolder = folderRes.data.files?.[0]
-      if (!meetFolder?.id) {
-        logCtx.info('Meet Recordings フォルダが見つかりません')
-        return []
+      for (const folder of foldersRes.data.files ?? []) {
+        if (folder.id && folder.name) {
+          folders.push({ id: folder.id, name: folder.name })
+        }
       }
-      sourceFolderId = meetFolder.id
-      logCtx.info({ sourceFolderId }, 'Meet Recordings フォルダを自動検出')
-    }
+      pageToken = foldersRes.data.nextPageToken ?? undefined
+    } while (pageToken)
 
-    // フォルダ内のファイルを取得（共有ドライブ両対応）
-    const filesRes = await drive.files.list({
-      q: `'${sourceFolderId}' in parents and trashed = false`,
-      fields: 'files(id, name, mimeType, createdTime, parents)',
-      orderBy: 'createdTime desc',
-      pageSize: 100,
-      spaces: 'drive',
-      includeItemsFromAllDrives: true,
-      supportsAllDrives: true,
-    })
-
-    const files = filesRes.data.files as DriveFile[] ?? []
-    logCtx.info({ count: files.length, sourceFolderId }, '移動元フォルダ ファイル取得完了')
-    return files
+    logCtx.info({ count: folders.length, sourceFolderId }, '移動元サブフォルダ取得完了')
+    return folders
   } catch (err) {
-    logCtx.error({ err }, '移動元フォルダ ファイル取得失敗')
+    logCtx.error({ err }, '移動元サブフォルダ取得失敗')
     throw err
   }
+}
+
+/**
+ * 指定フォルダ直下のファイルを取得（子フォルダは対象外・再帰探索なし）
+ */
+export async function getFilesInFolder(
+  userId: string,
+  folderId: string
+): Promise<DriveFile[]> {
+  const logCtx = createLogger({ module: 'drive-service', userId, folderId })
+
+  try {
+    const { client } = await getAuthenticatedClient(userId)
+    const drive = google.drive({ version: 'v3', auth: client })
+    const files: DriveFile[] = []
+    let pageToken: string | undefined
+
+    do {
+      const filesRes = await drive.files.list({
+        q: `'${folderId}' in parents and mimeType != '${DRIVE_FOLDER_MIME_TYPE}' and trashed = false`,
+        fields: 'nextPageToken, files(id, name, mimeType, createdTime, parents)',
+        orderBy: 'createdTime desc',
+        pageSize: 100,
+        pageToken,
+        spaces: 'drive',
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true,
+      })
+
+      for (const file of filesRes.data.files ?? []) {
+        if (file.id && file.name && file.mimeType && file.createdTime) {
+          files.push({
+            id: file.id,
+            name: file.name,
+            mimeType: file.mimeType,
+            createdTime: file.createdTime,
+            parents: file.parents ?? undefined,
+          })
+        }
+      }
+      pageToken = filesRes.data.nextPageToken ?? undefined
+    } while (pageToken)
+
+    logCtx.info({ count: files.length }, 'サブフォルダ内ファイル取得完了')
+    return files
+  } catch (err) {
+    logCtx.error({ err }, 'サブフォルダ内ファイル取得失敗')
+    throw err
+  }
+}
+
+/**
+ * 指定フォルダの中身を再取得し、ファイル・フォルダともに完全に空なら削除
+ */
+export async function deleteFolderIfEmpty(
+  userId: string,
+  folderId: string
+): Promise<boolean> {
+  const logCtx = createLogger({ module: 'drive-service', userId, folderId })
+  const { client } = await getAuthenticatedClient(userId)
+  const drive = google.drive({ version: 'v3', auth: client })
+
+  const childrenRes = await drive.files.list({
+    q: `'${folderId}' in parents and trashed = false`,
+    fields: 'files(id)',
+    pageSize: 1,
+    spaces: 'drive',
+    includeItemsFromAllDrives: true,
+    supportsAllDrives: true,
+  })
+
+  if ((childrenRes.data.files?.length ?? 0) > 0) {
+    logCtx.info('サブフォルダに子要素が残っているため削除をスキップ')
+    return false
+  }
+
+  await drive.files.delete({
+    fileId: folderId,
+    supportsAllDrives: true,
+  })
+  logCtx.info('空のサブフォルダを削除')
+  return true
 }
 
 /**

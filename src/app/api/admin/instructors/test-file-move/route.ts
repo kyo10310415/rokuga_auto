@@ -25,7 +25,14 @@ export async function POST(request: NextRequest) {
   // ユーザー情報取得
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true, recordingFolderId: true, fileMovingEnabled: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      recordingFolderId: true,
+      sourceFolderId: true,
+      fileMovingEnabled: true,
+    },
   })
 
   if (!user) {
@@ -48,7 +55,8 @@ export async function POST(request: NextRequest) {
     const result = await runFileMoveForUser(
       userId,
       user.recordingFolderId,
-      transcriptionFolderId
+      transcriptionFolderId,
+      user.sourceFolderId
     )
 
     return NextResponse.json({
