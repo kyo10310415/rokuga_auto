@@ -3,11 +3,12 @@ import { prisma } from '@/lib/prisma'
 import AppLayout from '@/components/layouts/AppLayout'
 import StatusBadge from '@/components/ui/StatusBadge'
 import { JobStatus } from '@prisma/client'
+import { redirect } from 'next/navigation'
 
 export default async function AdminCorrectionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; page?: string }>
+  searchParams: Promise<{ status?: string; page?: string; jobId?: string }>
 }) {
   await requireAdmin()
   
@@ -15,8 +16,14 @@ export default async function AdminCorrectionsPage({
   const page = parseInt(params.page || '1', 10)
   const limit = 30
   const statusFilter = params.status as JobStatus | undefined
+  const jobId = params.jobId?.trim() || undefined
   
-  const where = statusFilter ? { status: statusFilter } : {}
+  // ダッシュボードの「詳細」リンクでは対象ジョブだけを表示する
+  const where = jobId
+    ? { id: jobId }
+    : statusFilter
+      ? { status: statusFilter }
+      : {}
   
   const [jobs, total] = await Promise.all([
     prisma.correctionJob.findMany({
@@ -180,7 +187,8 @@ function RetryButton({ jobId }: { jobId: string }) {
           },
         })
         
-        executeJob(newJob.id).catch(console.error)
+        await executeJob(newJob.id)
+        redirect(`/admin/corrections?jobId=${newJob.id}`)
       }}
     >
       <button
