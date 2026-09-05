@@ -18,8 +18,7 @@ export default async function AdminDashboard() {
     expiredCount,
     upcomingEventsCount,
     pendingJobsCount,
-    failedJobsCount,
-    recentFailures,
+    latestJobsByEvent,
   ] = await Promise.all([
     prisma.user.count({ where: { role: 'USER', isActive: true } }),
     prisma.googleAccount.count({ where: { status: GoogleAccountStatus.ACTIVE } }),
@@ -33,17 +32,23 @@ export default async function AdminDashboard() {
       },
     }),
     prisma.correctionJob.count({ where: { status: JobStatus.PENDING } }),
-    prisma.correctionJob.count({ where: { status: JobStatus.FAILED } }),
     prisma.correctionJob.findMany({
-      where: { status: JobStatus.FAILED },
+      // 手動再実行前のFAILED履歴は残るため、予定ごとの最新ジョブだけを取得する
+      distinct: ['calendarEventId'],
       include: {
         user: { select: { name: true } },
         calendarEvent: { select: { eventTitle: true, startTime: true } },
       },
-      orderBy: { updatedAt: 'desc' },
-      take: 5,
+      orderBy: [
+        { createdAt: 'desc' },
+        { id: 'desc' },
+      ],
     }),
   ])
+
+  const currentFailures = latestJobsByEvent.filter((job) => job.status === JobStatus.FAILED)
+  const failedJobsCount = currentFailures.length
+  const recentFailures = currentFailures.slice(0, 5)
   
   return (
     <AppLayout>
