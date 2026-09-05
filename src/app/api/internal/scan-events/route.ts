@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { scanAndQueueJobs, executePendingJobs } from '@/lib/google/correction-engine'
+import {
+  cleanupOldCorrectionJobs,
+  executePendingJobs,
+  scanAndQueueJobs,
+} from '@/lib/google/correction-engine'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger({ module: 'internal-scan-events' })
@@ -28,13 +32,22 @@ export async function POST(request: NextRequest) {
     
     // Step 2: キューに入ったジョブを実行
     const execResult = await executePendingJobs()
+
+    // Step 3: 1か月より古い完了済み履歴を削除（失敗しても補正処理は成功扱い）
+    let cleanupResult = { deleted: 0 }
+    try {
+      cleanupResult = await cleanupOldCorrectionJobs()
+    } catch (err) {
+      log.error({ err }, '古い補正履歴の削除失敗')
+    }
     
-    log.info({ scanResult, execResult }, 'イベントスキャン・補正完了')
+    log.info({ scanResult, execResult, cleanupResult }, 'イベントスキャン・補正完了')
     
     return NextResponse.json({
       success: true,
       scan: scanResult,
       execution: execResult,
+      cleanup: cleanupResult,
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
