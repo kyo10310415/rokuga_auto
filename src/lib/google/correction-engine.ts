@@ -3,7 +3,7 @@ import { fetchUpcomingEvents, CalendarEventData } from '@/lib/google/calendar-se
 import { getMeetSpaceByLink, updateArtifactSettings } from '@/lib/google/meet-service'
 import { DetectionStatus, JobStatus, JobType, GoogleAccountStatus } from '@prisma/client'
 import { createLogger } from '@/lib/logger'
-import { addMinutes } from 'date-fns'
+import { addMinutes, subMonths } from 'date-fns'
 
 const log = createLogger({ module: 'correction-engine' })
 
@@ -236,6 +236,76 @@ export async function executePendingJobs(): Promise<{
   }
   
   return { executed, succeeded, failed }
+}
+
+/**
+ * まだ終了していない予定のうち、最新ジョブがFAILEDのものを一括で再実行待ちにする
+ * 実際の処理は既存のscan-events Cronが順次実行する
+ */
+export async function queueFailedCorrectionJobs(): Promise<{ queued: number }> {
+  const logCtx = createLogger({ module: 'correction-engine' })
+  const now = new Date()
+
+  const latestJobs = await prisma.correctionJob.findMany({
+    where: {
+      calendarEvent: { endTime: { gte: now } },
+      user: {
+        isActive: true,
+        googleAccount: { status: GoogleAccountStatus.ACTIVE },
+      },
+    },
+    distinct: ['calendarEventId'],
+    select: {
+      calendarEventId: true,
+      userId: true,
+      status: true,
+    },
+    orderBy: [
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ],
+  })
+
+  const failedJobs = latestJobs.filter((job) => job.status === JobStatus.FAILED)
+  if (failedJobs.length === 0) {
+    logCtx.info('一括再実行対象の補正失敗なし')
+    return { queued: 0 }
+  }
+
+  const result = await prisma.correctionJob.createMany({
+    data: failedJobs.map((job) => ({
+      calendarEventId: job.calendarEventId,
+      userId: job.userId,
+      jobType: JobType.MANUAL_RETRY,
+      status: JobStatus.PENDING,
+      scheduledAt: now,
+    })),
+  })
+
+  logCtx.info({ queued: result.count }, '補正失敗を一括再実行待ちに追加')
+  return { queued: result.count }
+}
+
+/**
+ * 1か月より古い完了済み補正ジョブを削除する
+ * 実行待ち・実行中・リトライ中のジョブは削除しない
+ */
+export async function cleanupOldCorrectionJobs(): Promise<{ deleted: number }> {
+  const logCtx = createLogger({ module: 'correction-engine' })
+  const cutoff = subMonths(new Date(), 1)
+  const result = await prisma.correctionJob.deleteMany({
+    where: {
+      completedAt: { lt: cutoff },
+      status: {
+        in: [JobStatus.SUCCESS, JobStatus.FAILED, JobStatus.SKIPPED],
+      },
+    },
+  })
+
+  if (result.count > 0) {
+    logCtx.info({ deleted: result.count, cutoff }, '古い補正履歴を削除')
+  }
+  return { deleted: result.count }
 }
 
 /**

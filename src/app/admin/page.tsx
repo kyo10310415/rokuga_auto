@@ -4,9 +4,39 @@ import AppLayout from '@/components/layouts/AppLayout'
 import StatusBadge from '@/components/ui/StatusBadge'
 import { GoogleAccountStatus, JobStatus, DetectionStatus } from '@prisma/client'
 import { addDays } from 'date-fns'
+import { queueFailedCorrectionJobs } from '@/lib/google/correction-engine'
+import { redirect } from 'next/navigation'
 
-export default async function AdminDashboard() {
+async function retryCurrentFailures() {
+  'use server'
+
+  const session = await requireAdmin()
+  const result = await queueFailedCorrectionJobs()
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      action: 'correction.bulk_retry',
+      targetType: 'CorrectionJob',
+      detail: { queued: result.queued },
+    },
+  })
+
+  redirect(`/admin?bulkRetryQueued=${result.queued}`)
+}
+
+export default async function AdminDashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ bulkRetryQueued?: string }>
+}) {
   await requireAdmin()
+
+  const params = await searchParams
+  const queuedParam = Number(params.bulkRetryQueued)
+  const bulkRetryQueued = Number.isInteger(queuedParam) && queuedParam >= 0
+    ? queuedParam
+    : undefined
   
   const now = new Date()
   const next7days = addDays(now, 7)
@@ -34,6 +64,13 @@ export default async function AdminDashboard() {
     prisma.correctionJob.count({ where: { status: JobStatus.PENDING } }),
     prisma.correctionJob.findMany({
       // 手動再実行前のFAILED履歴は残るため、予定ごとの最新ジョブだけを取得する
+      where: {
+        calendarEvent: { endTime: { gte: now } },
+        user: {
+          isActive: true,
+          googleAccount: { status: GoogleAccountStatus.ACTIVE },
+        },
+      },
       distinct: ['calendarEventId'],
       include: {
         user: { select: { name: true } },
@@ -57,6 +94,14 @@ export default async function AdminDashboard() {
           <h1 className="text-xl font-bold text-gray-900">管理ダッシュボード</h1>
           <p className="text-sm text-gray-500 mt-1">全講師の状態と補正処理の概要</p>
         </div>
+
+        {bulkRetryQueued !== undefined && (
+          <div className="bg-success-50 border border-success-200 rounded-md p-4">
+            <p className="text-sm text-success-700">
+              ✅ 補正失敗 {bulkRetryQueued}件を再実行待ちに追加しました。既存Cronで順次処理します。
+            </p>
+          </div>
+        )}
         
         {/* サマリーカード */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -114,8 +159,16 @@ export default async function AdminDashboard() {
         {/* 最近の失敗 */}
         {recentFailures.length > 0 && (
           <div className="card">
-            <div className="px-4 py-3 border-b border-gray-200">
+            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-4">
               <h2 className="text-sm font-semibold text-gray-900">⚠️ 最近の補正失敗</h2>
+              <form action={retryCurrentFailures}>
+                <button
+                  type="submit"
+                  className="text-xs bg-primary-600 text-white px-3 py-1.5 rounded hover:bg-primary-700 transition-colors whitespace-nowrap"
+                >
+                  失敗予定を一括再実行
+                </button>
+              </form>
             </div>
             <div className="divide-y divide-gray-100">
               {recentFailures.map((job) => (
@@ -148,7 +201,7 @@ export default async function AdminDashboard() {
             </div>
             <div className="px-4 py-3 border-t border-gray-100">
               <a href="/admin/corrections?status=FAILED" className="text-xs text-primary-600 hover:underline">
-                すべての失敗を確認 →
+                失敗履歴を確認 →
               </a>
             </div>
           </div>
