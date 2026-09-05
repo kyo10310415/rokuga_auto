@@ -117,7 +117,7 @@ function readArtifactSettings(spaceInfo: MeetSpaceInfo): ArtifactSettings {
  *
  * updateMask は使用しない:
  *   公式仕様「updateMask未指定の場合、リクエストボディに値があるフィールドが全て更新される」
- *   updateMask の正確なパス仕様が不明確なため、省略して全フィールド更新モードを使用する
+ *   録画・文字起こしだけをリクエストボディに含め、Smart Notesの設定は変更しない
  */
 export async function updateArtifactSettings(
   userId: string,
@@ -151,10 +151,6 @@ export async function updateArtifactSettings(
             transcriptionConfig: {
               autoTranscriptionGeneration: 'ON',
             },
-            // smartNotesConfig は現在の値を引き継ぐ（上書きしない）
-            ...(currentSpace.config?.artifactConfig?.smartNotesConfig
-              ? { smartNotesConfig: currentSpace.config.artifactConfig.smartNotesConfig }
-              : {}),
           },
         },
       },
