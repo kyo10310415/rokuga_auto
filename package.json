@@ -9,6 +9,7 @@
     "lint": "next lint",
     "postinstall": "prisma generate",
     "type-check": "tsc --noEmit",
+    "test:security": "node --test tests/*.test.cjs",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "sh scripts/migrate.sh",
