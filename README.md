@@ -69,3 +69,11 @@ npm run dev
 既存のログイン方式・24時間のJWT期限・DBschema・環境変数は変更していません。新しい設定は不要です。DB再照会が各セッション読取りで発生するため、DB障害時は保護画面/APIが利用できなくなります。Edge middleware内のJWT参照は画面遷移の補助であり、最終的な認証・認可は既存のサーバー側Auth.jsと各APIで行います。
 
 `npm run test:security`で、実DB・Google・HTTP待受けなしに本番JWT/session callbackと管理APIハンドラーを検証します。削除・無効化・降格・未知roleの拒否、正常管理者の読取り、現在のパスワード変更フラグ、DB障害時の拒否を確認します。本番の実ログイン・停止/降格操作は別途検証が必要です。今回の変更は新しいセッション世代管理や署名鍵交換を導入せず、無効化中のJWTの利用を現在DB状態で拒否する方式です。
+
+## 依存セキュリティ更新（2026-10-23）
+
+既存manifestの互換範囲内で、lockfileのNext.jsを15.5.28、next-authを5.0.0-beta.32、Auth.js coreを0.41.3、Prisma adapterを2.11.3へ更新しました。画像処理の[Next.js脆弱性](https://github.com/advisories/GHSA-2464-fhr4-w9xw)と、設定エラー時の[Auth.js認証判定不備](https://github.com/advisories/GHSA-8fpg-xm3f-6cx3)等を修正する版です。sharpやCSS/解析ツールの互換更新も含みます。認証・権限・DB schema・設定変数は変更しません。配備中に開始したOAuthログインが失敗した場合は、新しくログインを開始してください。
+
+隔離したローカル環境で、インストールスクリプトを無効にした再インストール、Prismaコード生成、型検査、本番ビルド、認可・JWTの11テストが成功しました。実DB・Google・録画・通知は未実行です。ビルドにはAuth.jsが使用するjoseのCompressionStream/DecompressionStreamに関するEdge警告が残り、実環境のログインは別途確認が必要です。
+
+npm auditはCritical 4→0、High 14→8、Moderate 10件です。残るHighは、修正版未公開のbracesを使用するTailwind/ESLint周辺と、Next.js内部に固定されたPostCSSです。依存件数を外部から成立する攻撃件数と同一視していません。Tailwind/Nextのメジャー移行やoverrideはこの更新に含めず、引き続き対応が必要です。
