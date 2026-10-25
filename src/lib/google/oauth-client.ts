@@ -1,4 +1,4 @@
-import { google } from 'googleapis'
+import { google, Auth } from 'googleapis'
 import { prisma } from '@/lib/prisma'
 import { encrypt, decrypt } from '@/lib/crypto/token-encrypt'
 import { GoogleAccountStatus } from '@prisma/client'
@@ -32,14 +32,16 @@ export function createOAuthClient() {
 /**
  * 認証URLを生成
  */
-export function getAuthUrl(userId: string): string {
+export function getAuthUrl(state: string, challenge: string): string {
   const client = createOAuthClient()
   
   return client.generateAuthUrl({
     access_type: 'offline',
     scope: GOOGLE_SCOPES,
     prompt: 'consent', // refresh_tokenを確実に取得するために毎回consent
-    state: userId,     // コールバック時にユーザーIDを識別
+    state,
+    code_challenge: challenge,
+    code_challenge_method: Auth.CodeChallengeMethod.S256,
     include_granted_scopes: true,
   })
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAuthSession } from '@/lib/auth/permissions'
 import { getAuthUrl } from '@/lib/google/oauth-client'
+import { flowCookieOptions, issueOAuthFlow } from '@/lib/google/oauth-flow'
 
 /**
  * GET /api/google/connect
@@ -13,7 +14,10 @@ export async function GET() {
     return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
   }
   
-  const authUrl = getAuthUrl(session.user.id)
-  
-  return NextResponse.redirect(authUrl)
+  const flow = issueOAuthFlow(session.user.id)
+  const response = NextResponse.redirect(getAuthUrl(flow.state, flow.challenge))
+  response.cookies.set({ ...flowCookieOptions(), value: flow.cookie })
+  response.headers.set('Cache-Control', 'no-store')
+  response.headers.set('Referrer-Policy', 'no-referrer')
+  return response
 }

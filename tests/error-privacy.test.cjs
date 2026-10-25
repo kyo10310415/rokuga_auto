@@ -51,11 +51,13 @@ test('OAuth callback redirect hides token-exchange error details', async () => {
     'next/server': require('next/server'),
     '@/lib/logger': { createLogger: () => noopLog },
     '@/lib/google/oauth-client': { createOAuthClient: () => ({ getToken: async () => { throw new Error(marker) } }), GOOGLE_SCOPES: [] },
+    '@/lib/auth/permissions': { getAuthSession: async () => ({ user: { id: 'fixture-user' } }) },
+    '@/lib/google/oauth-flow': { flowCookieOptions: () => ({ name: 'fixture-flow' }), verifyOAuthFlow: () => ({ verifier: 'fixture-verifier' }) },
     '@/lib/prisma': { prisma: { user: { findUnique: async () => ({ id: 'fixture-user' }) } } },
     '@/lib/crypto/token-encrypt': { encrypt: () => { throw Error('Must not encrypt') } },
     '@prisma/client': {}, googleapis: {},
   }, { NEXTAUTH_URL: 'https://fixture.invalid' })
-  const response = await mod.GET({ url: 'https://fixture.invalid/api/google/callback?code=fixture-code&state=fixture-user' })
+  const response = await mod.GET({ url: 'https://fixture.invalid/api/google/callback?code=fixture-code&state=fixture-user', cookies: { get: () => ({ value: 'fixture-cookie' }) } })
   const location = response.headers.get('location')
   assert.equal(new URL(location).searchParams.get('error'), 'connection_failed')
   assert.ok(!location.includes(marker))
