@@ -41,7 +41,7 @@ export async function PATCH(
   const body = await request.json().catch(() => null)
   const parsed = patchSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
   // 自分自身のロール変更は不可

@@ -77,3 +77,9 @@ npm run dev
 隔離したローカル環境で、インストールスクリプトを無効にした再インストール、Prismaコード生成、型検査、本番ビルド、認可・JWTの11テストが成功しました。実DB・Google・録画・通知は未実行です。ビルドにはAuth.jsが使用するjoseのCompressionStream/DecompressionStreamに関するEdge警告が残り、実環境のログインは別途確認が必要です。
 
 npm auditはCritical 4→0、High 14→8、Moderate 10件です。残るHighは、修正版未公開のbracesを使用するTailwind/ESLint周辺と、Next.js内部に固定されたPostCSSです。依存件数を外部から成立する攻撃件数と同一視していません。Tailwind/Nextのメジャー移行やoverrideはこの更新に含めず、引き続き対応が必要です。
+
+## 依存セキュリティ更新（2026-10-25）
+
+Next.js 16.4.3 / Zod 4.6.7へ更新しました。Node.js 20.9以上が必要です（検証は22.23.4）。React18とWebpackは維持し、開発・本番ビルドは明示的にWebpackを使います。lintはNext.jsコマンドからESLint9のflat configへ移行しました。Zodの入力エラーはissuesで取得します。環境変数・DBスキーマ・認可方針は変更しません。
+
+認証JWT・権限・middleware・入力検証の16テスト、型チェック、本番ビルドが成功しました。lintはエラー0、既存prisma.tsの不要なdisableコメントの警告1です。React18・middleware・images.domainsの非推奨警告とjoseのEdge警告は残ります。実Googleログインと録画処理は別途検証が必要です。npm auditはCritical0/High0/Moderate10であり、全問題の解消を意味しません。
