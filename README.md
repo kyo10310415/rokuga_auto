@@ -101,3 +101,11 @@ Google SDK等の例外をログへ直接展開しないよう、Pinoのerr/error
 node-cronと@types/node-cronは、追跡コード/スクリプトにimport・requireがないため削除しました。Render cronから内部APIを呼ぶ既存方式とjobsスクリプトは維持し、ジョブ時刻や設定を変更しません。全依存auditはCritical/High0、Moderate5→3（Tailwind関連が残存）。
 
 Node22.23.4でclean install(ignore-scripts)、Prismaコード生成（DB接続なし）、27テスト、型検査、本番ビルドが成功しました。追加試験は実Pinoの出力、内部APIの未認証401/認証済み失敗500、OAuth失敗URL、補正失敗時のリトライ/上限状態と記録内容を検証します。Google更新・Meet失敗試験も機密markerの非出力を検証します。DB・Google・業務ジョブは試験用置換で、本番操作は実行しません。
+
+## Google OAuth連携の利用者照合（2026-10-26）
+
+Google連携の開始時にランダムstateとPKCE verifierを発行し、既存NEXTAUTH_SECRET（未設定時AUTH_SECRET）で署名した10分有効のHttpOnly/SameSite=Lax Cookieへ保存します。HTTPSではSecure Cookie、Pathはコールバックのみ。callbackで現在のDB状態によるログイン確認、署名・state・利用者・期限を検証してからコードを交換し、保存先はログイン中の利用者IDから決めます。PKCEはS256、交換時にverifierを渡します。応答でCookieを消去し、no-store/no-referrerを指定します。
+
+新しい環境変数やDB定義は不要です。既存の認証secretは32文字以上が必要です。既存連携・トークンrefresh・OAuthスコープは維持します。配備前に開始した認証や10分超の認証は最初からやり直してください。同じブラウザーで複数開始すると最新のフローのみが有効です。Cookie削除後の通常の再送は拒否し、認可コード自体の一回性はGoogle側にも依存します。サーバー側の使い捨てnonce DBは追加していません。
+
+Node22.23.4で33テスト・型検査・本番Webpack build成功。state改ざん/期限/将来時刻/別ユーザー/未ログイン/ Cookie欠損/旧ID stateを交換とDB保存前に拒否すること、正常保存・スコープ拒否・提供元失敗・Cookie消去を検証。実Google SDKでS256/redirect URI/verifierのリクエスト形式を模擬HTTPで確認しています。実Google同意・本番DBへの保存は未検証です。
