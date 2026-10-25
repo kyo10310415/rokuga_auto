@@ -76,7 +76,7 @@ test('Drive service preserves shared-drive folder creation and parent update con
 
 test('Meet service keeps artifact PATCH body, skips already-enabled spaces and reports provider failure', async t => {
   let fail = false
-  const f = fixture(t, () => fail ? { status: 403, data: { error: { message: 'fixture-denied' } } } : {
+  const f = fixture(t, () => fail ? { status: 403, data: { error: { message: 'fixture-private-provider-detail' } } } : {
     data: { config: { artifactConfig: { recordingConfig: { autoRecordingGeneration: 'ON' }, transcriptionConfig: { autoTranscriptionGeneration: 'ON' } } } },
   })
   const service = load('meet-service', f.client)
@@ -92,6 +92,9 @@ test('Meet service keeps artifact PATCH body, skips already-enabled spaces and r
   assert.equal(f.requests.length, 1)
   fail = true
   assert.equal(await service.getMeetSpace('fixture-user', 'spaces/fixture'), null)
+  const failure = await service.updateArtifactSettings('fixture-user', 'spaces/fixture', {})
+  assert.equal(failure.success, false)
+  assert.ok(!JSON.stringify(failure).includes('fixture-private-provider-detail'))
 })
 
 test('OAuth refresh service keeps encrypted persistence and expired status with real auth client', async t => {
@@ -104,7 +107,7 @@ test('OAuth refresh service keeps encrypted persistence and expired status with 
       super(...args)
       this.transporter.defaults.fetchImplementation = async (url, options) => {
         requests.push({ url: new URL(url), body: new URLSearchParams(options.body) })
-        return new Response(JSON.stringify(fail ? { error: 'invalid_grant' } : {
+        return new Response(JSON.stringify(fail ? { error: 'invalid_grant', error_description: 'fixture-private-refresh-detail' } : {
           access_token: 'fixture-new-access', expires_in: 3600, token_type: 'Bearer',
         }), { status: fail ? 400 : 200, headers: { 'content-type': 'application/json' } })
       }
@@ -127,4 +130,5 @@ test('OAuth refresh service keeps encrypted persistence and expired status with 
   fail = true
   assert.equal(await service.refreshToken('fixture-user'), false)
   assert.equal(updates.at(-1).data.status, 'TOKEN_EXPIRED')
+  assert.ok(!JSON.stringify(updates).includes('fixture-private-refresh-detail'))
 })

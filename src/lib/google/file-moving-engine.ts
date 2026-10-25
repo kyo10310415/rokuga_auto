@@ -224,7 +224,7 @@ export async function runFileMoveForUser(
             })
           }
         } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : String(err)
+          const errorMessage = 'ファイルの移動に失敗しました。'
           logCtx.error({ fileName: file.name, sourceFolderId: sourceFolder.id, err }, 'ファイル移動失敗')
           hasMoveFailure = true
           errors++

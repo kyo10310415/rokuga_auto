@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
       new URL('/instructor?success=google_connected', process.env.NEXTAUTH_URL!)
     )
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
+    const errorMessage = 'Google連携に失敗しました。もう一度連携してください。'
     log.error({ userId, err }, 'Google OAuth コールバック処理失敗')
     
     return NextResponse.redirect(

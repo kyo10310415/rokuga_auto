@@ -93,3 +93,11 @@ qsを6.16.1、fast-copyを3.1.0へlockで更新しました。manifest・アプ�
 googleapisを150.0.1へ固定し、旧Google SDKのuuid依存経路を除去しました。APIバージョン・OAuthスコープ・環境変数・DB定義・認証は変更しません。npm auditはCritical/High0、Moderate8→5（cron/uuid、Tailwind関連が残存）。
 
 Node22.23.4、clean install(ignore-scripts)、Prismaコード生成（DB接続なし）、20テスト、型検査、本番Webpackビルド成功。追加4テストでは本番サービス関数と実Google SDKの通信先を模擬し、Calendarページ送り/キャンセル除外、共有Driveのフォルダ作成/親変更、Meet PATCH/既存ON時スキップ/失敗、OAuth refresh成功時の暗号化保存・失敗時statusを確認しました。DBと暗号化/復号、loggerは試験用に置換し、外部HTTP/HTTPS/fetchは禁止。実Google認証・DB・録画・移動・削除・Meet設定は試験実行していません。Nextの非推奨/jose Edge警告は残存します。
+
+## 例外情報の機密保護・未使用cron依存削除（2026-10-26）
+
+Google SDK等の例外をログへ直接展開しないよう、Pinoのerr/errorフィールドと直接Error引数を汎用表現へ置換します。Google連携・Meet/補正/ファイル移動、内部API、管理者の移動テストの失敗本文を固定文にし、OAuth失敗URL・履歴のerrorMessage/errorDetailへ上流例外を保存しません。ステータス・エラーコード・時刻・リトライ回数/間隔は維持します。新しい失敗記録の詳細が減るため、運用では処理イベントと時刻を使って確認してください。既存DB履歴・過去ログは変更/削除しません。通常の業務データや全ログの包括的な匿名化ではありません。
+
+node-cronと@types/node-cronは、追跡コード/スクリプトにimport・requireがないため削除しました。Render cronから内部APIを呼ぶ既存方式とjobsスクリプトは維持し、ジョブ時刻や設定を変更しません。全依存auditはCritical/High0、Moderate5→3（Tailwind関連が残存）。
+
+Node22.23.4でclean install(ignore-scripts)、Prismaコード生成（DB接続なし）、27テスト、型検査、本番ビルドが成功しました。追加試験は実Pinoの出力、内部APIの未認証401/認証済み失敗500、OAuth失敗URL、補正失敗時のリトライ/上限状態と記録内容を検証します。Google更新・Meet失敗試験も機密markerの非出力を検証します。DB・Google・業務ジョブは試験用置換で、本番操作は実行しません。

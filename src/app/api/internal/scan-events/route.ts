@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
+    const errorMessage = 'イベント取得ジョブに失敗しました。'
     log.error({ err }, 'イベントスキャン失敗')
     
     return NextResponse.json({

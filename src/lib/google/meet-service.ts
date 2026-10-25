@@ -161,7 +161,7 @@ export async function updateArtifactSettings(
     
     return { success: true, before, after }
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
+    const errorMessage = 'Meet設定の更新に失敗しました。権限や接続設定を確認してください。'
     logCtx.error({ err }, 'artifact設定更新失敗')
     
     return {

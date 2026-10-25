@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
+    const errorMessage = '開始前確認ジョブに失敗しました。'
     log.error({ err }, '開始前再確認失敗')
     
     return NextResponse.json({

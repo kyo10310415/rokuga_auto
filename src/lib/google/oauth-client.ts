@@ -159,7 +159,7 @@ export async function refreshToken(userId: string): Promise<boolean> {
     log2.info('トークンリフレッシュ成功')
     return true
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
+    const errorMessage = 'Google認証情報の更新に失敗しました。再連携してください。'
     log2.error({ err }, 'トークンリフレッシュ失敗')
     
     await prisma.googleAccount.update({
