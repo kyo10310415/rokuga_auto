@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
+    const errorMessage = 'ファイル移動ジョブに失敗しました。'
     log.error({ err }, 'ファイル移動ジョブ失敗')
 
     return NextResponse.json({

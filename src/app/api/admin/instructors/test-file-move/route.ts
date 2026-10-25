@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       ...result,
     })
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
+    const errorMessage = 'ファイル移動に失敗しました。'
     return NextResponse.json({
       success: false,
       error: errorMessage,

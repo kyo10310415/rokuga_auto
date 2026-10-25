@@ -398,7 +398,7 @@ export async function executeJob(jobId: string): Promise<boolean> {
       throw new Error(result.error || '補正失敗（原因不明）')
     }
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
+    const errorMessage = '補正処理に失敗しました。'
     logCtx.error({ err }, '補正失敗')
     
     // リトライ判定
@@ -412,7 +412,7 @@ export async function executeJob(jobId: string): Promise<boolean> {
           status: JobStatus.RETRYING,
           errorCode: 'CORRECTION_ERROR',
           errorMessage,
-          errorDetail: { err: String(err), timestamp: new Date().toISOString() },
+          errorDetail: { timestamp: new Date().toISOString() },
           nextRetryAt: nextRetry,
           scheduledAt: nextRetry,
         },
@@ -434,7 +434,7 @@ export async function executeJob(jobId: string): Promise<boolean> {
           completedAt: new Date(),
           errorCode: 'MAX_RETRY_EXCEEDED',
           errorMessage,
-          errorDetail: { err: String(err), timestamp: new Date().toISOString() },
+          errorDetail: { timestamp: new Date().toISOString() },
         },
       })
       
