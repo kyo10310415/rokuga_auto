@@ -83,3 +83,7 @@ npm auditはCritical 4→0、High 14→8、Moderate 10件です。残るHighは�
 Next.js 16.4.3 / Zod 4.6.7へ更新しました。Node.js 20.9以上が必要です（検証は22.23.4）。React18とWebpackは維持し、開発・本番ビルドは明示的にWebpackを使います。lintはNext.jsコマンドからESLint9のflat configへ移行しました。Zodの入力エラーはissuesで取得します。環境変数・DBスキーマ・認可方針は変更しません。
 
 認証JWT・権限・middleware・入力検証の16テスト、型チェック、本番ビルドが成功しました。lintはエラー0、既存prisma.tsの不要なdisableコメントの警告1です。React18・middleware・images.domainsの非推奨警告とjoseのEdge警告は残ります。実Googleログインと録画処理は別途検証が必要です。npm auditはCritical0/High0/Moderate10であり、全問題の解消を意味しません。
+
+## 推移依存の互換更新（2026-10-25）
+
+qsを6.16.1、fast-copyを3.1.0へlockで更新しました。manifest・アプリソース・認証・DB定義・設定は変更しません。Node22.23.4でclean install(ignore-scripts)、Prismaコード生成（DB接続なし）、16テスト、型検査、本番Webpackビルド成功。本番依存auditはCritical/High0、Moderate10→8。Google/uuid、node-cron、Tailwind関連は残存です。fast-copyはpino-pretty側で、確認したloggerは開発時のみpretty transportを使います。全入力経路の非到達を証明したものではありません。実DB・Google・録画・通知は試験していません。
