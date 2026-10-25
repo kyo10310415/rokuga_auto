@@ -87,3 +87,9 @@ Next.js 16.4.3 / Zod 4.6.7へ更新しました。Node.js 20.9以上が必要で
 ## 推移依存の互換更新（2026-10-25）
 
 qsを6.16.1、fast-copyを3.1.0へlockで更新しました。manifest・アプリソース・認証・DB定義・設定は変更しません。Node22.23.4でclean install(ignore-scripts)、Prismaコード生成（DB接続なし）、16テスト、型検査、本番Webpackビルド成功。本番依存auditはCritical/High0、Moderate10→8。Google/uuid、node-cron、Tailwind関連は残存です。fast-copyはpino-pretty側で、確認したloggerは開発時のみpretty transportを使います。全入力経路の非到達を証明したものではありません。実DB・Google・録画・通知は試験していません。
+
+## Googleクライアント更新（2026-10-26）
+
+googleapisを150.0.1へ固定し、旧Google SDKのuuid依存経路を除去しました。APIバージョン・OAuthスコープ・環境変数・DB定義・認証は変更しません。npm auditはCritical/High0、Moderate8→5（cron/uuid、Tailwind関連が残存）。
+
+Node22.23.4、clean install(ignore-scripts)、Prismaコード生成（DB接続なし）、20テスト、型検査、本番Webpackビルド成功。追加4テストでは本番サービス関数と実Google SDKの通信先を模擬し、Calendarページ送り/キャンセル除外、共有Driveのフォルダ作成/親変更、Meet PATCH/既存ON時スキップ/失敗、OAuth refresh成功時の暗号化保存・失敗時statusを確認しました。DBと暗号化/復号、loggerは試験用に置換し、外部HTTP/HTTPS/fetchは禁止。実Google認証・DB・録画・移動・削除・Meet設定は試験実行していません。Nextの非推奨/jose Edge警告は残存します。
