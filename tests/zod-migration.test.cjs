@@ -15,7 +15,7 @@ function load(file, schemaName) {
     '@/lib/auth/permissions': { getAuthSession: async () => session },
     '@/lib/auth/auth.config': { auth: async () => session },
     '@/lib/prisma': { prisma }, '@prisma/client': { UserRole: { ADMIN: 'ADMIN', USER: 'USER' } },
-    bcryptjs: {}, zod: { z },
+    bcryptjs: {}, zod: { z }, 'node:crypto': require('node:crypto'),
   }
   const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8') + '\nexport const testSchema = ' + schemaName
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText

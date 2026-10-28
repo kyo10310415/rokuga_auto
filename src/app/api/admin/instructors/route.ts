@@ -3,6 +3,7 @@ import { getAuthSession } from '@/lib/auth/permissions'
 import { prisma } from '@/lib/prisma'
 import { UserRole } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 
 /**
@@ -105,38 +106,46 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // 初期パスワードは "1111" 固定。初回ログイン後に変更を強制する
-  const hashedPassword = await bcrypt.hash('1111', 12)
+  // Unique per account; plaintext is returned only to the creating administrator.
+  const initialPassword = randomBytes(24).toString('base64url')
+  const hashedPassword = await bcrypt.hash(initialPassword, 12)
 
-  const user = await prisma.user.create({
-    data: {
-      name,
-      email,
-      role: role as UserRole,
-      mustChangePassword: true,
-      emailVerified: new Date(),
-      accounts: {
-        create: {
-          type: 'credentials',
-          provider: 'credentials',
-          providerAccountId: email,
-          access_token: hashedPassword,
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: {
+        name,
+        email,
+        role: role as UserRole,
+        mustChangePassword: true,
+        emailVerified: new Date(),
+        accounts: {
+          create: {
+            type: 'credentials',
+            provider: 'credentials',
+            providerAccountId: email,
+            access_token: hashedPassword,
+          },
         },
       },
-    },
-    select: { id: true, name: true, email: true, role: true, createdAt: true },
+      select: { id: true, name: true, email: true, role: true, createdAt: true },
+    })
+
+    // 監査ログ
+    await tx.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: 'admin.create_instructor',
+        targetType: 'User',
+        targetId: created.id,
+        detail: { email: created.email, name: created.name },
+      },
+    })
+
+    return created
   })
 
-  // 監査ログ
-  await prisma.auditLog.create({
-    data: {
-      userId: session.user.id,
-      action: 'admin.create_instructor',
-      targetType: 'User',
-      targetId: user.id,
-      detail: { email: user.email, name: user.name },
-    },
+  return NextResponse.json({ instructor: user, initialPassword }, {
+    status: 201,
+    headers: { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' },
   })
-
-  return NextResponse.json({ instructor: user }, { status: 201 })
 }

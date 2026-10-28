@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface Props {
@@ -14,9 +14,21 @@ export default function CreateInstructorModal({ onClose }: Props) {
   const [role, setRole] = useState<'USER' | 'ADMIN'>('USER')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [initialPassword, setInitialPassword] = useState('')
+  const [delivered, setDelivered] = useState(false)
+  const [createdEmail, setCreatedEmail] = useState('')
+  const submitting = useRef(false)
+
+  const close = () => {
+    if (submitting.current || (initialPassword && !delivered)) return
+    setInitialPassword('')
+    onClose()
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (submitting.current || initialPassword) return
+    submitting.current = true
     setLoading(true)
     setError('')
 
@@ -34,11 +46,13 @@ export default function CreateInstructorModal({ onClose }: Props) {
         return
       }
 
+      setCreatedEmail(data.instructor.email)
+      setInitialPassword(data.initialPassword)
       router.refresh()
-      onClose()
     } catch {
       setError('通信エラーが発生しました')
     } finally {
+      submitting.current = false
       setLoading(false)
     }
   }
@@ -46,15 +60,16 @@ export default function CreateInstructorModal({ onClose }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+      onClick={(e) => { if (e.target === e.currentTarget) close() }}
     >
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-base font-semibold text-gray-900">アカウントを作成</h2>
           <button
-            onClick={onClose}
+            onClick={close}
             className="text-gray-400 hover:text-gray-600 text-xl leading-none"
             aria-label="閉じる"
+            disabled={loading || (!!initialPassword && !delivered)}
           >
             ×
           </button>
@@ -66,7 +81,20 @@ export default function CreateInstructorModal({ onClose }: Props) {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {initialPassword ? (
+          <div className="space-y-4">
+            <p className="text-sm">{createdEmail} のアカウントを作成しました。</p>
+            <p className="text-sm text-amber-800">初期パスワードは今回だけ表示されます。本人確認済みの私的な経路で渡してください。共有チャットや画面共有には表示しないでください。</p>
+            <label htmlFor="initial-password" className="block text-sm font-medium">初期パスワード</label>
+            <input id="initial-password" type="text" readOnly value={initialPassword} autoComplete="off" spellCheck={false} className="w-full border rounded-md p-2 font-mono text-sm" />
+            <p className="text-xs text-gray-600">本人の初回ログイン後に変更が必要です。閉じると再表示できません。</p>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={delivered} onChange={(e) => setDelivered(e.target.checked)} />
+              本人へ渡した、または安全な場所に控えました
+            </label>
+            <button type="button" onClick={close} disabled={!delivered} className="btn-primary">閉じる</button>
+          </div>
+        ) : <form onSubmit={handleSubmit} className="space-y-4">
           {/* 氏名 */}
           <div>
             <label htmlFor="new-name" className="block text-sm font-medium text-gray-700 mb-1">
@@ -77,6 +105,7 @@ export default function CreateInstructorModal({ onClose }: Props) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={loading}
               required
               placeholder="山田 太郎"
               className="w-full border border-gray-300 rounded-md py-2 px-3 text-sm
@@ -94,6 +123,7 @@ export default function CreateInstructorModal({ onClose }: Props) {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
               required
               placeholder="user@example.com"
               className="w-full border border-gray-300 rounded-md py-2 px-3 text-sm
@@ -104,10 +134,10 @@ export default function CreateInstructorModal({ onClose }: Props) {
           {/* 初期パスワード案内 */}
           <div className="bg-amber-50 border border-amber-200 rounded-md px-4 py-3">
             <p className="text-sm font-medium text-amber-800">
-              初期パスワード：<span className="font-mono tracking-widest">1111</span>
+              初期パスワードは作成時にランダム生成します
             </p>
             <p className="mt-0.5 text-xs text-amber-700">
-              初回ログイン後にパスワード変更が必要です。本人に口頭でお伝えください。
+              作成後に一度だけ表示します。本人へ安全に渡し、初回ログイン後に変更してください。
             </p>
           </div>
 
@@ -124,6 +154,7 @@ export default function CreateInstructorModal({ onClose }: Props) {
               }`}>
                 <input
                   type="radio"
+                  disabled={loading}
                   name="role"
                   value="USER"
                   checked={role === 'USER'}
@@ -143,6 +174,7 @@ export default function CreateInstructorModal({ onClose }: Props) {
               }`}>
                 <input
                   type="radio"
+                  disabled={loading}
                   name="role"
                   value="ADMIN"
                   checked={role === 'ADMIN'}
@@ -161,7 +193,7 @@ export default function CreateInstructorModal({ onClose }: Props) {
           <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={close}
               className="btn-secondary"
               disabled={loading}
             >
@@ -175,7 +207,7 @@ export default function CreateInstructorModal({ onClose }: Props) {
               {loading ? '作成中...' : '作成する'}
             </button>
           </div>
-        </form>
+        </form>}
       </div>
     </div>
   )
