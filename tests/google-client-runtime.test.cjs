@@ -61,6 +61,10 @@ test('Calendar service preserves pagination, cancelled filtering and Meet links 
 test('Drive service preserves shared-drive folder creation and parent update contracts offline', async t => {
   const f = fixture(t, req => ({ data: req.method === 'GET' ? { files: [] } : { id: 'fixture-folder' } }))
   const service = load('drive-service', f.client)
+  assert.equal(service.classifySpecialFile('ロープレ - 2026/11/12 10:00 JST～Recording'), 'recording')
+  assert.equal(service.classifySpecialFile('1on1 - 2026/11/12 10:00 JST - Gemini によるメモ'), 'transcription')
+  assert.equal(service.classifySpecialFile('チームMTG - 2026/11/12 10:00 JST - Gemini によるメモ'), 'transcription')
+  assert.equal(service.classifySpecialFile('ロープレ - その他.txt'), 'unknown')
   assert.equal(await service.getOrCreateStudentFolder('fixture-user', 'fixture-parent', 'fixture-student'), 'fixture-folder')
   const create = f.requests.find(req => req.method === 'POST')
   assert.equal(create.body.name, 'fixture-student')

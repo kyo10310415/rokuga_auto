@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
       name: true,
       email: true,
       recordingFolderId: true,
+      specialFileFolderId: true,
       sourceFolderId: true,
       fileMovingEnabled: true,
     },
@@ -39,8 +40,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'ユーザーが見つかりません' }, { status: 404 })
   }
 
-  if (!user.recordingFolderId) {
-    return NextResponse.json({ error: '録画保存先フォルダが設定されていません' }, { status: 400 })
+  if (!user.recordingFolderId && !user.specialFileFolderId) {
+    return NextResponse.json({ error: '保存先フォルダが設定されていません' }, { status: 400 })
   }
 
   // 文字起こし共通フォルダIDをシステム設定から取得
@@ -56,7 +57,8 @@ export async function POST(request: NextRequest) {
       userId,
       user.recordingFolderId,
       transcriptionFolderId,
-      user.sourceFolderId
+      user.sourceFolderId,
+      user.specialFileFolderId
     )
 
     return NextResponse.json({

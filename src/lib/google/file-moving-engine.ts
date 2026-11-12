@@ -11,6 +11,7 @@ import {
   extractDateFromFileName,
   extractFolderIdFromUrl,
   classifyFile,
+  classifySpecialFile,
   extractStudentIdFromDescription,
   MoveResult,
 } from '@/lib/google/drive-service'
@@ -33,7 +34,7 @@ export interface FileMoveEngineResult {
 /**
  * 全ユーザーのファイル移動を実行
  * - fileMovingEnabled = true のユーザーのみ対象
- * - recordingFolderId が設定されているユーザーのみ対象
+ * - 既存または追加の保存先フォルダが設定されているユーザーのみ対象
  */
 export async function runFileMoveForAllUsers(
   userIdFilter?: string  // テスト用: 特定ユーザーのみ実行
@@ -49,10 +50,13 @@ export async function runFileMoveForAllUsers(
     ? extractFolderIdFromUrl(transcriptionFolderUrl)
     : null
 
-  // fileMovingEnabled=true かつ recordingFolderId が設定されているユーザーを取得
+  // fileMovingEnabled=true かつ、いずれかの保存先が設定されているユーザーを取得
   const whereClause = {
     fileMovingEnabled: true,
-    recordingFolderId: { not: null },
+    OR: [
+      { recordingFolderId: { not: null } },
+      { specialFileFolderId: { not: null } },
+    ],
     isActive: true,
     googleAccount: {
       status: GoogleAccountStatus.ACTIVE,
@@ -82,9 +86,10 @@ export async function runFileMoveForAllUsers(
     try {
       const userResult = await runFileMoveForUser(
         user.id,
-        user.recordingFolderId!,
+        user.recordingFolderId,
         transcriptionFolderId,
-        user.sourceFolderId  // 自動検出ルートに追加するユーザーごとの移動元フォルダURL
+        user.sourceFolderId,  // 自動検出ルートに追加するユーザーごとの移動元フォルダURL
+        user.specialFileFolderId
       )
       result.usersProcessed++
       result.recordingsMoved += userResult.recordingsMoved
@@ -107,9 +112,10 @@ export async function runFileMoveForAllUsers(
  */
 export async function runFileMoveForUser(
   userId: string,
-  recordingFolderUrl: string,
+  recordingFolderUrl: string | null,
   transcriptionFolderId: string | null,
-  sourceFolderUrl?: string | null
+  sourceFolderUrl?: string | null,
+  specialFileFolderUrl?: string | null
 ): Promise<{
   recordingsMoved: number
   transcriptionsMoved: number
@@ -120,14 +126,26 @@ export async function runFileMoveForUser(
   const logCtx = createLogger({ module: 'file-moving-engine', userId })
   logCtx.info('ユーザーファイル移動開始')
 
-  const recordingFolderId = extractFolderIdFromUrl(recordingFolderUrl)
-  if (!recordingFolderId) {
+  let errors = 0
+  const recordingFolderId = recordingFolderUrl
+    ? extractFolderIdFromUrl(recordingFolderUrl)
+    : null
+  if (recordingFolderUrl && !recordingFolderId) {
     logCtx.warn({ recordingFolderUrl }, '録画フォルダIDの抽出失敗')
-    return { recordingsMoved: 0, transcriptionsMoved: 0, skipped: 0, errors: 1, details: [] }
+    errors++
+  } else if (recordingFolderId) {
+    logCtx.info({ recordingFolderId, recordingFolderUrl }, '録画フォルダID確認')
   }
 
-  // フォルダIDの存在確認
-  logCtx.info({ recordingFolderId, recordingFolderUrl }, '録画フォルダID確認')
+  const specialFileFolderId = specialFileFolderUrl
+    ? extractFolderIdFromUrl(specialFileFolderUrl)
+    : null
+  if (specialFileFolderUrl && !specialFileFolderId) {
+    logCtx.warn({ specialFileFolderUrl }, '追加ファイル保存先フォルダIDの抽出失敗')
+    errors++
+  } else if (specialFileFolderId) {
+    logCtx.info({ specialFileFolderId }, '追加ファイル保存先フォルダID確認')
+  }
 
   // 指定ルートと、認証ユーザーのマイドライブ直下にある全Google Meetルートを探索
   const sourceFolders = await getMeetSourceFolders(userId, sourceFolderUrl)
@@ -135,7 +153,6 @@ export async function runFileMoveForUser(
   let recordingsMoved = 0
   let transcriptionsMoved = 0
   let skipped = 0
-  let errors = 0
   const details: MoveResult[] = []
 
   for (const sourceFolder of sourceFolders) {
@@ -152,7 +169,11 @@ export async function runFileMoveForUser(
       let hasMoveFailure = false
 
       for (const file of files) {
-        const fileType = classifyFile(file.name)
+        // 新キーワードを優先し、設定された共通フォルダ直下へ移動する
+        const specialFileType = classifySpecialFile(file.name)
+        const fileType = specialFileType !== 'unknown'
+          ? specialFileType
+          : classifyFile(file.name)
 
         if (fileType === 'unknown') {
           logCtx.info({ fileName: file.name }, '対象外ファイルをスキップ')
@@ -161,7 +182,38 @@ export async function runFileMoveForUser(
         }
 
         try {
-          if (fileType === 'recording') {
+          if (specialFileType !== 'unknown') {
+            if (!specialFileFolderId) {
+              logCtx.info({ fileName: file.name }, '追加ファイル保存先未設定: スキップ')
+              skipped++
+              continue
+            }
+
+            const currentParentId = file.parents?.[0] ?? sourceFolder.id
+            await moveFile(userId, file.id, currentParentId, specialFileFolderId)
+
+            logCtx.info(
+              { fileName: file.name, destinationFolderId: specialFileFolderId },
+              '追加対象ファイル移動完了'
+            )
+            if (specialFileType === 'recording') {
+              recordingsMoved++
+            } else {
+              transcriptionsMoved++
+            }
+            details.push({
+              fileId: file.id,
+              fileName: file.name,
+              type: specialFileType,
+              success: true,
+              destinationFolderId: specialFileFolderId,
+            })
+          } else if (!recordingFolderId) {
+            // 既存機能は録画保存先が設定されている場合だけ動作する
+            logCtx.info({ fileName: file.name }, '既存の録画保存先未設定: スキップ')
+            skipped++
+            continue
+          } else if (fileType === 'recording') {
             // 録画ファイル: ユーザー指定フォルダ/年月フォルダに移動
             const date = extractDateFromFileName(file.name)
             if (!date) {

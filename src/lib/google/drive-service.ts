@@ -12,6 +12,7 @@ const TRANSCRIPTION_PATTERN = /Gemini によるメモ$/
 // 移動対象フィルタ: ファイル名にいずれかのキーワードを含むもののみ対象
 // 録画・文字起こし両方に適用
 const MOVE_TARGET_KEYWORDS = ['レッスン', 'Proプラン', 'PROプラン', '所属生']
+const SPECIAL_MOVE_TARGET_KEYWORDS = ['ロープレ', '1on1', 'チームMTG']
 const DRIVE_FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder'
 const DRIVE_SHORTCUT_MIME_TYPE = 'application/vnd.google-apps.shortcut'
 const DEFAULT_SOURCE_FOLDER_NAME = 'Google Meet'
@@ -403,6 +404,17 @@ export function extractDateFromFileName(fileName: string): { year: number; month
  */
 export function classifyFile(fileName: string): 'recording' | 'transcription' | 'unknown' {
   const isTarget = MOVE_TARGET_KEYWORDS.some((kw) => fileName.includes(kw))
+  if (RECORDING_PATTERN.test(fileName) && isTarget) return 'recording'
+  if (TRANSCRIPTION_PATTERN.test(fileName) && isTarget) return 'transcription'
+  return 'unknown'
+}
+
+/**
+ * 新しい共通保存先へ移動する録画／Geminiメモを判定
+ * 対象キーワード: ロープレ / 1on1 / チームMTG
+ */
+export function classifySpecialFile(fileName: string): 'recording' | 'transcription' | 'unknown' {
+  const isTarget = SPECIAL_MOVE_TARGET_KEYWORDS.some((kw) => fileName.includes(kw))
   if (RECORDING_PATTERN.test(fileName) && isTarget) return 'recording'
   if (TRANSCRIPTION_PATTERN.test(fileName) && isTarget) return 'transcription'
   return 'unknown'
