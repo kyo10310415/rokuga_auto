@@ -15,6 +15,7 @@ export default async function InstructorsPage() {
       role: true,
       isActive: true,
       recordingFolderId: true,
+      specialFileFolderId: true,
       sourceFolderId: true,
       fileMovingEnabled: true,
       googleAccount: {

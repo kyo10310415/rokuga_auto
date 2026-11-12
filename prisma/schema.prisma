@@ -73,6 +73,8 @@ model User {
   mustChangePassword Boolean @default(false)
   // 録画ファイル移動先フォルダID（Google DriveフォルダのID）
   recordingFolderId String?
+  // ロープレ・1on1・チームMTGの録画／Geminiメモ移動先フォルダURL
+  specialFileFolderId String?
   // 自動検出する "Google Meet" フォルダに追加する移動元ルートURL
   sourceFolderId    String?
   // ファイル移動機能のON/OFF

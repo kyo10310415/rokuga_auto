@@ -21,6 +21,7 @@ interface User {
   role: UserRole
   isActive: boolean
   recordingFolderId: string | null
+  specialFileFolderId: string | null
   sourceFolderId: string | null
   fileMovingEnabled: boolean
   googleAccount: GoogleAccount | null
@@ -120,12 +121,19 @@ function DeleteConfirmDialog({ user, onConfirm, onCancel, loading }: DeleteDialo
 interface RecordingFolderModalProps {
   user: User
   onClose: () => void
-  onSave: (userId: string, folderUrl: string | null, sourceFolderUrl: string | null, fileMovingEnabled: boolean) => Promise<void>
+  onSave: (
+    userId: string,
+    folderUrl: string | null,
+    specialFileFolderUrl: string | null,
+    sourceFolderUrl: string | null,
+    fileMovingEnabled: boolean
+  ) => Promise<void>
   loading: boolean
 }
 
 function RecordingFolderModal({ user, onClose, onSave, loading }: RecordingFolderModalProps) {
   const [folderUrl, setFolderUrl] = useState(user.recordingFolderId ?? '')
+  const [specialFileFolderUrl, setSpecialFileFolderUrl] = useState(user.specialFileFolderId ?? '')
   const [sourceFolderUrl, setSourceFolderUrl] = useState(user.sourceFolderId ?? '')
   const [fileMovingEnabled, setFileMovingEnabled] = useState(user.fileMovingEnabled)
   const [testLoading, setTestLoading] = useState(false)
@@ -162,9 +170,9 @@ function RecordingFolderModal({ user, onClose, onSave, loading }: RecordingFolde
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6 space-y-5">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6 space-y-5 max-h-[90vh] overflow-y-auto">
         <h3 className="text-base font-semibold text-gray-900">
-          📁 録画ファイル設定 — {user.name || user.email}
+          📁 ファイル移動設定 — {user.name || user.email}
         </h3>
 
         {/* 追加の移動元フォルダURL入力 */}
@@ -190,6 +198,7 @@ function RecordingFolderModal({ user, onClose, onSave, loading }: RecordingFolde
         <div className="space-y-2">
           <label className="block text-sm font-medium text-gray-700">
             録画保存先フォルダURL
+            <span className="ml-1 text-xs font-normal text-gray-400">(任意)</span>
           </label>
           <input
             type="url"
@@ -204,12 +213,34 @@ function RecordingFolderModal({ user, onClose, onSave, loading }: RecordingFolde
           </p>
         </div>
 
+        {/* 追加キーワード用保存先フォルダURL入力 */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            ロープレ・1on1・チームMTG保存先フォルダURL
+            <span className="ml-1 text-xs font-normal text-gray-400">(任意)</span>
+          </label>
+          <input
+            type="url"
+            value={specialFileFolderUrl}
+            onChange={(e) => setSpecialFileFolderUrl(e.target.value)}
+            placeholder="https://drive.google.com/drive/folders/..."
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
+                       focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          <p className="text-xs text-gray-500">
+            対象の録画とGeminiメモを、このフォルダ直下へ移動します。空欄の場合は追加機能を実行しません
+          </p>
+        </div>
+
         {/* フォルダ構成説明 */}
         <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-xs text-blue-800 space-y-0.5">
-          <p className="font-medium">📂 自動で作成されるフォルダ構成</p>
+          <p className="font-medium">📂 保存先フォルダ構成</p>
           <p>指定フォルダ（親）</p>
           <p className="pl-3">└ 2026-6（年月）← 自動作成</p>
           <p className="pl-6">└ 録画ファイル</p>
+          <p className="mt-1">ロープレ・1on1・チームMTG保存先</p>
+          <p className="pl-3">├ 録画ファイル</p>
+          <p className="pl-3">└ Geminiメモ</p>
         </div>
 
         {/* ファイル移動トグル */}
@@ -243,7 +274,7 @@ function RecordingFolderModal({ user, onClose, onSave, loading }: RecordingFolde
             </div>
             <button
               onClick={handleTest}
-              disabled={testLoading || !folderUrl}
+              disabled={testLoading || (!folderUrl && !specialFileFolderUrl)}
               className="text-xs px-3 py-1.5 rounded border border-primary-300
                          text-primary-700 hover:bg-primary-50 transition-colors
                          disabled:opacity-50 disabled:cursor-not-allowed"
@@ -272,7 +303,13 @@ function RecordingFolderModal({ user, onClose, onSave, loading }: RecordingFolde
         <div className="flex justify-end gap-3 pt-2">
           <button onClick={onClose} className="btn-secondary text-sm">キャンセル</button>
           <button
-            onClick={() => onSave(user.id, folderUrl || null, sourceFolderUrl || null, fileMovingEnabled)}
+            onClick={() => onSave(
+              user.id,
+              folderUrl || null,
+              specialFileFolderUrl || null,
+              sourceFolderUrl || null,
+              fileMovingEnabled
+            )}
             disabled={loading}
             className="btn-primary text-sm disabled:opacity-50"
           >
@@ -342,6 +379,7 @@ export default function InstructorsClient({ users: initial, currentUserId }: Pro
   const handleSaveRecordingFolder = async (
     userId: string,
     folderUrl: string | null,
+    specialFileFolderUrl: string | null,
     sourceFolderUrl: string | null,
     fileMovingEnabled: boolean
   ) => {
@@ -350,7 +388,12 @@ export default function InstructorsClient({ users: initial, currentUserId }: Pro
       const res = await fetch(`/api/admin/instructors/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recordingFolderUrl: folderUrl, sourceFolderUrl, fileMovingEnabled }),
+        body: JSON.stringify({
+          recordingFolderUrl: folderUrl,
+          specialFileFolderUrl,
+          sourceFolderUrl,
+          fileMovingEnabled,
+        }),
       })
       if (!res.ok) {
         const d = await res.json()
